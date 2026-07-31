@@ -94,9 +94,7 @@ export default function StemStudio() {
     setAiSuccessMessage(null);
     
     try {
-      // Intentamos usar la URL de API de la variable de entorno, de lo contrario fallback a local
-      const apiUrl = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api/ai/chords` : 'http://localhost:3000/api/ai/chords';
-      const res = await fetch(apiUrl, {
+      const res = await fetch('/api/ai/chords', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
