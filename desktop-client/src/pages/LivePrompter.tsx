@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAudioEngine, StemTrack } from '../hooks/useAudioEngine';
 import { Prompter } from '../components/Prompter';
 import { Play, Pause, Square, MonitorSpeaker, Mic, Edit3, Save, AlertCircle, Music, Headphones, Activity } from 'lucide-react';
-import './App.css';
+import '../App.css';
 
 const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 
