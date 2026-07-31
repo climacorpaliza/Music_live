@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import StemUploader from '../components/StemUploader';
-import { Music, FolderPlus, Disc3, FileAudio, Loader2, Trash2 } from 'lucide-react';
+import { Music, FolderPlus, Disc3, FileAudio, Loader2, Trash2, Sparkles, CheckCircle, RefreshCw } from 'lucide-react';
 
 const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -11,6 +11,17 @@ export default function StemStudio() {
   const [stems, setStems] = useState<any[]>([]);
   const [loadingSongs, setLoadingSongs] = useState(true);
   const [loadingStems, setLoadingStems] = useState(false);
+
+  // AI Generator state
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [aiSuccessMessage, setAiSuccessMessage] = useState<string | null>(null);
+  const [manualBpm, setManualBpm] = useState<string>('');
+  const [manualKey, setManualKey] = useState<string>('');
+  const [timeSignature, setTimeSignature] = useState<string>('4/4');
+  
+  // Tap Tempo State
+  const [, setTapTimes] = useState<number[]>([]);
+  const [, setTapBpm] = useState<number | null>(null);
 
   useEffect(() => {
     fetchSongs();
@@ -52,6 +63,64 @@ export default function StemStudio() {
       fetchStems(newSongId);
     } else if (selectedSongId) {
       fetchStems(selectedSongId);
+    }
+  };
+
+  const handleTap = () => {
+    const now = Date.now();
+    setTapTimes(prev => {
+      // Keep only taps within the last 3 seconds
+      const recentTaps = prev.filter(time => now - time < 3000);
+      const newTaps = [...recentTaps, now];
+      
+      if (newTaps.length > 1) {
+        const intervals = [];
+        for (let i = 1; i < newTaps.length; i++) {
+          intervals.push(newTaps[i] - newTaps[i-1]);
+        }
+        const avgInterval = intervals.reduce((a, b) => a + b) / intervals.length;
+        const bpm = Math.round(60000 / avgInterval);
+        setTapBpm(bpm);
+        setManualBpm(bpm.toString());
+      }
+      
+      return newTaps;
+    });
+  };
+
+  const handleGenerateChordsAI = async () => {
+    if (!selectedSongId) return;
+    setIsGeneratingAI(true);
+    setAiSuccessMessage(null);
+    
+    try {
+      // Intentamos usar la URL de API de la variable de entorno, de lo contrario fallback a local
+      const apiUrl = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api/ai/chords` : 'http://localhost:3000/api/ai/chords';
+      const res = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          songId: selectedSongId,
+          manualBpm: manualBpm ? parseFloat(manualBpm) : undefined,
+          manualKey: manualKey || undefined,
+          timeSignature
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(data.error || 'Error desconocido del servidor IA');
+      }
+
+      setAiSuccessMessage("¡Acordes generados y guardados en la nube exitosamente!");
+      setTimeout(() => setAiSuccessMessage(null), 5000);
+      
+    } catch (error: any) {
+      console.error("Error saving AI chords:", error);
+      alert(`Falló la detección IA: ${error.message}\n(Asegúrate de que el backend en Next.js esté corriendo en el puerto 3000 o configura VITE_API_URL)`);
+    } finally {
+      setIsGeneratingAI(false);
     }
   };
 
@@ -141,6 +210,68 @@ export default function StemStudio() {
               onUploadComplete={handleUploadComplete}
             />
           </div>
+
+          {/* AI Intelligence Section */}
+          {selectedSongId && (
+            <div className="bg-[#1A1A1A] p-6 rounded-2xl border border-purple-900/50 shadow-xl relative overflow-hidden backdrop-blur-xl">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-purple-600/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+              
+              <h4 className="text-sm font-bold text-gray-200 mb-4 flex items-center">
+                <span className="w-2 h-2 rounded-full bg-purple-500 mr-2 shadow-[0_0_8px_rgba(168,85,247,0.8)]"></span>
+                Inteligencia Artificial (Detección de Tempo y Notas)
+              </h4>
+              
+              <div className="space-y-4 relative z-10">
+                <div className="flex space-x-2">
+                  <div className="flex-1">
+                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1 block">BPM Real (Opcional)</label>
+                    <div className="flex space-x-1">
+                      <input type="number" value={manualBpm} onChange={(e) => setManualBpm(e.target.value)} placeholder="Ej: 97" className="w-full bg-[#111] border border-[#333] rounded-l px-3 py-2 text-xs text-white focus:border-purple-500 outline-none transition" />
+                      <button 
+                        onClick={handleTap}
+                        className="bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 px-4 rounded-r text-[10px] font-bold tracking-wider transition active:scale-95 border border-purple-500/30"
+                        title="Haz clic varias veces al ritmo de la música"
+                      >
+                        TAP
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1 block">Compás</label>
+                    <select value={timeSignature} onChange={(e) => setTimeSignature(e.target.value)} className="w-full bg-[#111] border border-[#333] rounded px-3 py-2 text-xs text-white focus:border-purple-500 outline-none transition">
+                      <option value="4/4">4/4 (Estándar)</option>
+                      <option value="3/4">3/4 (Vals)</option>
+                      <option value="6/8">6/8 (Balada)</option>
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1 block">Clave (Opcional)</label>
+                    <input type="text" value={manualKey} onChange={(e) => setManualKey(e.target.value)} placeholder="Ej: Bb Major" className="w-full bg-[#111] border border-[#333] rounded px-3 py-2 text-xs text-white focus:border-purple-500 outline-none transition" />
+                  </div>
+                </div>
+                
+                <button 
+                  onClick={handleGenerateChordsAI}
+                  disabled={!selectedSongId || isGeneratingAI || stems.length === 0}
+                  className="w-full bg-purple-600 hover:bg-purple-500 text-white p-3 rounded-xl font-bold text-sm shadow-[0_0_15px_rgba(147,51,234,0.3)] transition flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isGeneratingAI ? <RefreshCw className="animate-spin mr-2" size={18} /> : <Sparkles className="mr-2" size={18} />}
+                  {isGeneratingAI ? "Analizando Armonía..." : "✨ Detectar Tempo y Notas con IA"}
+                </button>
+                
+                {aiSuccessMessage ? (
+                  <p className="text-xs text-green-400 leading-tight flex items-center bg-green-900/20 p-3 rounded-xl">
+                    <CheckCircle size={16} className="mr-2 shrink-0" />
+                    {aiSuccessMessage}
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-gray-500 leading-tight italic">
+                    Al hacer clic, el motor AI detectará automáticamente el BPM, la clave y el mapa de acordes de los Stems y los guardará para el Live Prompter.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Stems List Section */}
           {selectedSongId && (
