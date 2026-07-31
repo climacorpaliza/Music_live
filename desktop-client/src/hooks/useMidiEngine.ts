@@ -36,7 +36,7 @@ export const useMidiEngine = (events: MidiEvent[]) => {
           setSelectedOutputId(outputsArray[0].id);
         }
 
-        access.onstatechange = (e) => {
+        access.onstatechange = (_e) => {
           // Handle connection/disconnection of MIDI devices
           const updatedOutputs: WebMidi.MIDIOutput[] = [];
           access.outputs.forEach(output => updatedOutputs.push(output));

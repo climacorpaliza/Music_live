@@ -70,7 +70,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
   }, []);
 
   // 2. Cargar Buffers en Memoria
-  const loadStems = async (bpm?: number, gridOffsetTime: number = 0, timeSignature: string = '4/4', beatTimes: number[] = [], prompterData?: any) => {
+  const loadStems = async (bpm?: number, gridOffsetTime: number = 0, timeSignature: string = '4/4', _beatTimes: number[] = [], prompterData?: any) => {
     if (!audioContext.current) return;
     
     // Resume context if suspended (browser auto-play policy)
@@ -247,7 +247,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     const globalOffset = pauseTime.current;
     
     // A. Reproducir los Stems Musicales
-    sourceNodes.current.forEach((source, id) => {
+    sourceNodes.current.forEach((source, _id) => {
       if (globalOffset < preRollDuration) {
         source.start(audioContext.current!.currentTime + (preRollDuration - globalOffset), 0);
       } else {
@@ -445,7 +445,9 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       if (gainNode) {
         const isMuted = stem.muted || (hasSolo && !stem.solo);
         // setTargetAtTime evita "clicks" o "pops" de audio al mover el fader bruscamente
-        gainNode.gain.setTargetAtTime(isMuted ? 0 : stem.volume, audioContext.current.currentTime, 0.01);
+        if (audioContext.current) {
+          gainNode.gain.setTargetAtTime(isMuted ? 0 : stem.volume, audioContext.current.currentTime, 0.01);
+        }
       }
     });
   }, [stems, isPlaying]);

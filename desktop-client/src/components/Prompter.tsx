@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 
 export interface ChordEvent {
   chord: string;
@@ -211,7 +211,7 @@ export const Prompter: React.FC<PrompterProps> = ({ currentTime, bpm, timeSignat
             {sectionBlocks.map((block, i) => {
               const isActive = currentTime >= block.time && currentTime < block.time + block.duration;
               const isPast = currentTime >= block.time + block.duration;
-              const colorClass = getSectionColor(block.name || block.section);
+              const colorClass = getSectionColor(block.name || block.section || "");
               
               return (
                 <div 
