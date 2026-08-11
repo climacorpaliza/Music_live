@@ -63,7 +63,7 @@ export default function StemStudio() {
   };
 
   const analyzeTempoLocally = async (url: string) => {
-    return new Promise<any>(async (resolve, reject) => {
+    return new Promise<any>(async (resolve) => {
       try {
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
         const ctx = new AudioContextClass();

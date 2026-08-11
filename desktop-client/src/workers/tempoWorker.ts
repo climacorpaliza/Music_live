@@ -1,3 +1,4 @@
+// @ts-ignore
 import MusicTempo from 'music-tempo';
 
 self.onmessage = function(e) {
@@ -16,12 +17,12 @@ self.onmessage = function(e) {
     if (bpm > 150) {
       bpm = bpm / 2.0;
       // Filtramos la grilla para que mantenga solo los golpes fuertes reales (1, 3 en lugar de 1, 2, 3, 4)
-      beats = beats.filter((_, index) => index % 2 === 0);
+      beats = beats.filter((_: any, index: number) => index % 2 === 0);
       firstBeat = beats.length > 0 ? beats[0] : 0.0;
     }
 
     // Redondeo de precisión para evitar flotantes largos en BD
-    beats = beats.map(t => Number(t.toFixed(3)));
+    beats = beats.map((t: any) => Number(t.toFixed(3)));
     firstBeat = Number(firstBeat.toFixed(3));
     
     self.postMessage({ success: true, bpm, firstBeat, beatTimes: beats });
