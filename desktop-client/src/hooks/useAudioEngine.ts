@@ -137,6 +137,63 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       }
     }
     
+    // --- AUTO-ADAPTACIÓN RÍTMICA (COMPENSACIÓN DE LATENCIA EN NAVEGADOR) ---
+    const drumStem = stems.find(s => s.name.toLowerCase().includes('drum') || s.name.toLowerCase().includes('bater') || s.name.toLowerCase().includes('perc'));
+    if (drumStem && buffers.current.has(drumStem.id) && prompterData && prompterData.beatTimes && prompterData.beatTimes.length > 0) {
+        try {
+            setLoadProgress({ loaded: stems.length, total: stems.length, currentFile: `Sincronizando transitorios...` });
+            const drumBuffer = buffers.current.get(drumStem.id)!;
+            const data = drumBuffer.getChannelData(0);
+            const sr = drumBuffer.sampleRate;
+            const windowSamples = Math.floor(0.1 * sr); // Ventana de ±100ms
+            
+            let offsets: number[] = [];
+            // Analizamos los primeros 16 golpes para calcular el offset global (padding del MP3 en Chrome)
+            const beatsToAnalyze = Math.min(16, prompterData.beatTimes.length);
+            
+            for (let i = 0; i < beatsToAnalyze; i++) {
+                const originalTime = prompterData.beatTimes[i];
+                const centerSample = Math.floor(originalTime * sr);
+                const startSample = Math.max(0, centerSample - windowSamples);
+                const endSample = Math.min(data.length, centerSample + windowSamples);
+                
+                let maxEnergy = 0;
+                let peakSample = centerSample;
+                
+                // Encontrar el pico exacto de energía (ataque del transitorio)
+                for (let j = startSample; j < endSample; j++) {
+                    const energy = Math.abs(data[j]);
+                    if (energy > maxEnergy) {
+                        maxEnergy = energy;
+                        peakSample = j;
+                    }
+                }
+                
+                // Si el pico es lo suficientemente fuerte como para ser considerado un golpe
+                if (maxEnergy > 0.1) {
+                    offsets.push((peakSample - centerSample) / sr);
+                }
+            }
+            
+            if (offsets.length > 0) {
+                // Tomar la mediana de los offsets para ignorar anomalías (fills) y obtener el padding exacto
+                offsets.sort((a, b) => a - b);
+                const medianOffset = offsets[Math.floor(offsets.length / 2)];
+                
+                console.log(`[Auto-Sync] Compensación de latencia de decodificación aplicada: ${medianOffset * 1000}ms`);
+                
+                // Aplicar compensación a toda la grilla de la canción
+                prompterData.beatTimes = prompterData.beatTimes.map((t: number) => t + medianOffset);
+                if (prompterData.firstBeatOffset !== undefined) {
+                    prompterData.firstBeatOffset += medianOffset;
+                }
+            }
+        } catch (e) {
+            console.error("[Auto-Sync] Error en compensación rítmica:", e);
+        }
+    }
+    // ------------------------------------------------------------------------
+
     // Calcular preRollDuration basado en el BPM (1 compás extra)
     let preRollDuration = 0;
     const beatsPerMeasure = parseInt(timeSignature.split('/')[0]) || 4;
