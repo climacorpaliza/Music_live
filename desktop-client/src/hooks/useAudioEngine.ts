@@ -289,7 +289,8 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       
       let shiftedBeatTimes: number[] = [];
       if (prompterData.beatTimes && prompterData.beatTimes.length > 0) {
-         for (let i = beatsPerMeasure; i > 0; i--) shiftedBeatTimes.push(preRollDuration - (i * beatInterval));
+         const firstSongBeatTime = prompterData.beatTimes[0] + preRollDuration;
+         for (let i = beatsPerMeasure; i > 0; i--) shiftedBeatTimes.push(firstSongBeatTime - (i * beatInterval));
          shiftedBeatTimes = [...shiftedBeatTimes, ...prompterData.beatTimes.map((t: number) => t + preRollDuration)];
       } else {
          const maxTime = preRollDuration + (totalDuration > 0 ? totalDuration : 600);
@@ -339,7 +340,8 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       let bTimes: number[] = [];
       
       if (prompterData.beatTimes && prompterData.beatTimes.length > 0) {
-         for (let i = beatsPerMeasure; i > 0; i--) bTimes.push(preRollDuration - (i * beatInterval));
+         const firstSongBeatTime = prompterData.beatTimes[0] + preRollDuration;
+         for (let i = beatsPerMeasure; i > 0; i--) bTimes.push(firstSongBeatTime - (i * beatInterval));
          bTimes = [...bTimes, ...prompterData.beatTimes.map((t: number) => t + preRollDuration)];
       } else {
          const maxTime = preRollDuration + (totalDuration > 0 ? totalDuration : 600);
