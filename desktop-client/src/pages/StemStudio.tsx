@@ -157,15 +157,47 @@ export default function StemStudio() {
         throw new Error(data.error || 'Error desconocido del servidor IA');
       }
 
-      setAiSuccessMessage("¡Acordes generados y guardados en la nube exitosamente!");
-      setTimeout(() => setAiSuccessMessage(null), 5000);
-      
+      const { predictionId, prompterData } = data;
+      setAiSuccessMessage(`Modelo iniciado... Procesando acordes en la nube.`);
+
+      // 3. POLLING: Consultar a Vercel cada 3 segundos sin causar Timeout
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusRes = await fetch('/api/ai/chords/status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              predictionId,
+              prompterData,
+              songId: selectedSongId
+            })
+          });
+          
+          const statusData = await statusRes.json();
+          if (!statusRes.ok) throw new Error(statusData.error || 'Error en polling');
+
+          if (statusData.done) {
+            clearInterval(pollInterval);
+            setIsGeneratingAI(false);
+            setAiSuccessMessage("¡Acordes generados y guardados en la nube exitosamente!");
+            setTimeout(() => setAiSuccessMessage(null), 5000);
+          } else {
+            setAiSuccessMessage(`IA Procesando... Estado: ${statusData.status}`);
+          }
+        } catch (pollErr: any) {
+          clearInterval(pollInterval);
+          setIsGeneratingAI(false);
+          console.error("Error en polling:", pollErr);
+          alert(`Falló la comprobación de IA: ${pollErr.message}`);
+        }
+      }, 3000);
+
     } catch (error: any) {
       console.error("Error saving AI chords:", error);
       alert(`Falló la detección IA: ${error.message}\n(Asegúrate de que el backend en Next.js esté corriendo en el puerto 3000 o configura VITE_API_URL)`);
-    } finally {
       setIsGeneratingAI(false);
     }
+    // No usamos `finally { setIsGeneratingAI(false); }` aquí porque el polling maneja el final del proceso.
   };
 
   const deleteStem = async (stemId: string) => {
