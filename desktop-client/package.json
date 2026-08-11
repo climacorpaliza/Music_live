@@ -17,6 +17,7 @@
     "jszip": "^3.10.1",
     "lucide-react": "^1.27.0",
     "music-metadata": "^11.14.0",
+    "music-tempo": "^1.0.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.18.2",

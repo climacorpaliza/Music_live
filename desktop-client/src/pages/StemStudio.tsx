@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import StemUploader from '../components/StemUploader';
 import { Music, FolderPlus, Disc3, FileAudio, Loader2, Trash2, Sparkles, CheckCircle, RefreshCw } from 'lucide-react';
+import MusicTempo from 'music-tempo';
 
 const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -61,19 +62,85 @@ export default function StemStudio() {
     }
   };
 
+  const analyzeTempoLocally = async (url: string) => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const ctx = new AudioContextClass();
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Error al descargar audio para analizar');
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      
+      let audioData = [];
+      // Usar el primer canal (mono) para el análisis
+      if (audioBuffer.numberOfChannels === 2) {
+        const channel1Data = audioBuffer.getChannelData(0);
+        const channel2Data = audioBuffer.getChannelData(1);
+        const length = channel1Data.length;
+        for (let i = 0; i < length; i++) {
+          audioData[i] = (channel1Data[i] + channel2Data[i]) / 2;
+        }
+      } else {
+        audioData = Array.from(audioBuffer.getChannelData(0));
+      }
+
+      const mt = new MusicTempo(audioData);
+      const bpm = mt.tempo;
+      const firstBeat = mt.beats.length > 0 ? mt.beats[0] : 0.0;
+      // Generar grilla
+      const duration = audioBuffer.duration;
+      const interval = 60.0 / bpm;
+      const beatTimes = [];
+      let t = firstBeat;
+      while (t <= duration) {
+        beatTimes.push(Number(t.toFixed(3)));
+        t += interval;
+      }
+
+      console.log(`[Frontend DSP] BPM Detectado: ${bpm}, First Beat: ${firstBeat}`);
+      return { bpm, firstBeat, beatTimes };
+    } catch (err) {
+      console.error("[Frontend DSP] Error analizando tempo:", err);
+      return null;
+    }
+  };
+
   const handleGenerateChordsAI = async () => {
     if (!selectedSongId) return;
     setIsGeneratingAI(true);
     setAiSuccessMessage(null);
     
     try {
+      // 1. Detección Local de BPM para evitar colapsos en Vercel
+      let detectedBpm = null;
+      let firstBeat = 0.0;
+      let beatTimes: number[] = [];
+
+      const drumStem = stems.find(s => s.name.toLowerCase().includes('drum') || s.name.toLowerCase().includes('bater') || s.name.toLowerCase().includes('perc'));
+      const masterStem = stems.find(s => s.name.toLowerCase().includes('master')) || stems[0];
+      const targetStem = drumStem || masterStem;
+
+      if (targetStem) {
+        const tempoData = await analyzeTempoLocally(targetStem.file_url);
+        if (tempoData) {
+          detectedBpm = tempoData.bpm;
+          firstBeat = tempoData.firstBeat;
+          beatTimes = tempoData.beatTimes;
+        }
+      }
+
+      // 2. Enviar a Vercel para extracción de Acordes (Replicate) y guardado
       const res = await fetch('/api/ai/chords', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           songId: selectedSongId,
           manualKey: manualKey || undefined,
-          timeSignature
+          timeSignature,
+          stems, // Send stems so backend can find chordStem
+          detectedBpm,
+          firstBeat,
+          beatTimes
         })
       });
       
