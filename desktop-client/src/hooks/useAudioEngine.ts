@@ -21,8 +21,9 @@ const generateClickBuffer = (ctx: AudioContext, frequency: number) => {
   const data = buffer.getChannelData(0);
   for (let i = 0; i < data.length; i++) {
     const t = i / sampleRate;
-    const env = Math.exp(-t * 60); 
-    data[i] = Math.sin(2 * Math.PI * frequency * t) * env * 0.8;
+    const env = Math.exp(-t * 80); 
+    // Usamos Math.cos para generar un transitorio (transient) instantáneo en t=0 (pico máximo inicial)
+    data[i] = Math.cos(2 * Math.PI * frequency * t) * env * 0.8;
   }
   return buffer;
 };
@@ -291,8 +292,10 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
          shiftedBeatTimes = [...shiftedBeatTimes, ...prompterData.beatTimes.map((t: number) => t + preRollDuration)];
       } else {
          const maxTime = preRollDuration + (totalDuration > 0 ? totalDuration : 600);
+         const startOffset = (prompterData.firstBeatOffset || 0) + manualGridOffset;
          for (let t = preRollDuration - (beatsPerMeasure * beatInterval); t <= maxTime; t += beatInterval) {
-             if (t >= 0) shiftedBeatTimes.push(t);
+             const adjusted = t + startOffset;
+             if (adjusted >= 0) shiftedBeatTimes.push(adjusted);
          }
       }
 
@@ -339,8 +342,10 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
          bTimes = [...bTimes, ...prompterData.beatTimes.map((t: number) => t + preRollDuration)];
       } else {
          const maxTime = preRollDuration + (totalDuration > 0 ? totalDuration : 600);
+         const startOffset = (prompterData.firstBeatOffset || 0) + manualGridOffset;
          for (let t = preRollDuration - (beatsPerMeasure * beatInterval); t <= maxTime; t += beatInterval) {
-             if (t >= 0) bTimes.push(t);
+             const adjusted = t + startOffset;
+             if (adjusted >= 0) bTimes.push(adjusted);
          }
       }
 
