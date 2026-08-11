@@ -108,8 +108,8 @@ export default function StemStudio() {
           worker.terminate();
         };
 
-        // Pasamos el buffer completo por referencia (Transferable)
-        worker.postMessage(audioData.buffer, [audioData.buffer]);
+        // Pasamos el buffer completo y el sampleRate (Transferable)
+        worker.postMessage({ buffer: audioData.buffer, sampleRate: ctx.sampleRate }, [audioData.buffer]);
         
       } catch (err) {
         console.error("[Frontend DSP] Error analizando tempo:", err);
