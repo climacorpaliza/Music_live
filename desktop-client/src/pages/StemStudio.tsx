@@ -72,20 +72,26 @@ export default function StemStudio() {
       const arrayBuffer = await response.arrayBuffer();
       const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
       
-      let audioData = [];
+      let audioData: Float32Array;
       // Usar el primer canal (mono) para el análisis
       if (audioBuffer.numberOfChannels === 2) {
         const channel1Data = audioBuffer.getChannelData(0);
         const channel2Data = audioBuffer.getChannelData(1);
         const length = channel1Data.length;
+        audioData = new Float32Array(length);
         for (let i = 0; i < length; i++) {
-          audioData[i] = (channel1Data[i] + channel2Data[i]) / 2;
+          audioData[i] = (channel1Data[i] + channel2Data[i]) / 2.0;
         }
       } else {
-        audioData = Array.from(audioBuffer.getChannelData(0));
+        audioData = audioBuffer.getChannelData(0);
       }
 
-      const mt = new MusicTempo(audioData);
+      // Evitar congelamientos procesando audio muy largo: limitamos el análisis a los primeros 60 segundos
+      const MAX_SECONDS = 60;
+      const maxSamples = Math.min(audioData.length, ctx.sampleRate * MAX_SECONDS);
+      const audioDataTrimmed = audioData.slice(0, maxSamples);
+
+      const mt = new MusicTempo(audioDataTrimmed);
       const bpm = mt.tempo;
       const firstBeat = mt.beats.length > 0 ? mt.beats[0] : 0.0;
       // Generar grilla
