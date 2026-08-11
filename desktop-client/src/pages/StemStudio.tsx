@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import StemUploader from '../components/StemUploader';
 import { Music, FolderPlus, Disc3, FileAudio, Loader2, Trash2, Sparkles, CheckCircle, RefreshCw } from 'lucide-react';
-// @ts-ignore
-import MusicTempo from 'music-tempo';
+import TempoWorker from '../workers/tempoWorker?worker';
 
 const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -64,52 +63,59 @@ export default function StemStudio() {
   };
 
   const analyzeTempoLocally = async (url: string) => {
-    try {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      const ctx = new AudioContextClass();
-      const response = await fetch(url);
-      if (!response.ok) throw new Error('Error al descargar audio para analizar');
-      const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-      
-      let audioData: Float32Array;
-      // Usar el primer canal (mono) para el análisis
-      if (audioBuffer.numberOfChannels === 2) {
-        const channel1Data = audioBuffer.getChannelData(0);
-        const channel2Data = audioBuffer.getChannelData(1);
-        const length = channel1Data.length;
-        audioData = new Float32Array(length);
-        for (let i = 0; i < length; i++) {
-          audioData[i] = (channel1Data[i] + channel2Data[i]) / 2.0;
+    return new Promise<any>(async (resolve, reject) => {
+      try {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        const ctx = new AudioContextClass();
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Error al descargar audio para analizar');
+        const arrayBuffer = await response.arrayBuffer();
+        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+        
+        let audioData: Float32Array;
+        // Usar el primer canal (mono) para el análisis
+        if (audioBuffer.numberOfChannels === 2) {
+          const channel1Data = audioBuffer.getChannelData(0);
+          const channel2Data = audioBuffer.getChannelData(1);
+          const length = channel1Data.length;
+          audioData = new Float32Array(length);
+          for (let i = 0; i < length; i++) {
+            audioData[i] = (channel1Data[i] + channel2Data[i]) / 2.0;
+          }
+        } else {
+          audioData = audioBuffer.getChannelData(0);
         }
-      } else {
-        audioData = audioBuffer.getChannelData(0);
+
+        const worker = new TempoWorker();
+        
+        worker.onmessage = (e) => {
+          if (e.data.success) {
+            resolve({
+              bpm: e.data.bpm,
+              firstBeat: e.data.firstBeat,
+              beatTimes: e.data.beatTimes
+            });
+          } else {
+            console.error("[Worker Error]", e.data.error);
+            resolve(null);
+          }
+          worker.terminate();
+        };
+
+        worker.onerror = (err) => {
+          console.error("[Worker fatal error]", err);
+          resolve(null);
+          worker.terminate();
+        };
+
+        // Pasamos el buffer completo por referencia (Transferable)
+        worker.postMessage(audioData.buffer, [audioData.buffer]);
+        
+      } catch (err) {
+        console.error("[Frontend DSP] Error analizando tempo:", err);
+        resolve(null);
       }
-
-      // Evitar congelamientos procesando audio muy largo: limitamos el análisis a los primeros 60 segundos
-      const MAX_SECONDS = 60;
-      const maxSamples = Math.min(audioData.length, ctx.sampleRate * MAX_SECONDS);
-      const audioDataTrimmed = audioData.slice(0, maxSamples);
-
-      const mt = new MusicTempo(audioDataTrimmed);
-      const bpm = mt.tempo;
-      const firstBeat = mt.beats.length > 0 ? mt.beats[0] : 0.0;
-      // Generar grilla
-      const duration = audioBuffer.duration;
-      const interval = 60.0 / bpm;
-      const beatTimes = [];
-      let t = firstBeat;
-      while (t <= duration) {
-        beatTimes.push(Number(t.toFixed(3)));
-        t += interval;
-      }
-
-      console.log(`[Frontend DSP] BPM Detectado: ${bpm}, First Beat: ${firstBeat}`);
-      return { bpm, firstBeat, beatTimes };
-    } catch (err) {
-      console.error("[Frontend DSP] Error analizando tempo:", err);
-      return null;
-    }
+    });
   };
 
   const handleGenerateChordsAI = async () => {
