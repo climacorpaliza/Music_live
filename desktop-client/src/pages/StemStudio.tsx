@@ -163,7 +163,7 @@ export default function StemStudio() {
       // 3. POLLING: Consultar a Vercel cada 3 segundos sin causar Timeout
       const pollInterval = setInterval(async () => {
         try {
-          const statusRes = await fetch('/api/ai/chords/status', {
+          const statusRes = await fetch('/api/ai/status', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
