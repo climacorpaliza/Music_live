@@ -187,6 +187,9 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
                 if (prompterData.firstBeatOffset !== undefined) {
                     prompterData.firstBeatOffset += medianOffset;
                 }
+                if (prompterData.sections) {
+                    prompterData.sections = prompterData.sections.map((s: any) => ({...s, time: s.time + medianOffset}));
+                }
             }
         } catch (e) {
             console.error("[Auto-Sync] Error en compensación rítmica:", e);
