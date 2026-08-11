@@ -264,11 +264,12 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     
     const preRollDuration = preRollDurationRef.current;
     const globalOffset = pauseTime.current;
+    const now = audioContext.current.currentTime;
     
     // A. Reproducir los Stems Musicales
     sourceNodes.current.forEach((source, _id) => {
       if (globalOffset < preRollDuration) {
-        source.start(audioContext.current!.currentTime + (preRollDuration - globalOffset), 0);
+        source.start(now + (preRollDuration - globalOffset), 0);
       } else {
         source.start(0, globalOffset - preRollDuration);
       }
@@ -317,7 +318,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
             if (masterGain) source.connect(masterGain);
             else source.connect(audioContext.current.destination);
             
-            source.start(audioContext.current.currentTime + (adjustedTime - globalOffset));
+            source.start(now + (adjustedTime - globalOffset));
             clickSources.current.push(source);
           }
         }
@@ -376,7 +377,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
                   if (masterGain) gain.connect(masterGain);
                   else gain.connect(audioContext.current!.destination);
                   
-                  source.start(audioContext.current!.currentTime + (absoluteTime - globalOffset));
+                  source.start(now + (absoluteTime - globalOffset));
                   cueSources.current.push(source);
                }
             }
@@ -395,7 +396,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       });
     }
     
-    startTime.current = audioContext.current.currentTime - globalOffset;
+    startTime.current = now - globalOffset;
     setIsPlaying(true);
     isPlayingRef.current = true;
     updateTime();
