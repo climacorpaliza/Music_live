@@ -15,14 +15,9 @@ export default function StemStudio() {
   // AI Generator state
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [aiSuccessMessage, setAiSuccessMessage] = useState<string | null>(null);
-  const [manualBpm, setManualBpm] = useState<string>('');
   const [manualKey, setManualKey] = useState<string>('');
   const [timeSignature, setTimeSignature] = useState<string>('4/4');
   
-  // Tap Tempo State
-  const [, setTapTimes] = useState<number[]>([]);
-  const [, setTapBpm] = useState<number | null>(null);
-
   useEffect(() => {
     fetchSongs();
   }, []);
@@ -66,28 +61,6 @@ export default function StemStudio() {
     }
   };
 
-  const handleTap = () => {
-    const now = Date.now();
-    setTapTimes(prev => {
-      // Keep only taps within the last 3 seconds
-      const recentTaps = prev.filter(time => now - time < 3000);
-      const newTaps = [...recentTaps, now];
-      
-      if (newTaps.length > 1) {
-        const intervals = [];
-        for (let i = 1; i < newTaps.length; i++) {
-          intervals.push(newTaps[i] - newTaps[i-1]);
-        }
-        const avgInterval = intervals.reduce((a, b) => a + b) / intervals.length;
-        const bpm = Math.round(60000 / avgInterval);
-        setTapBpm(bpm);
-        setManualBpm(bpm.toString());
-      }
-      
-      return newTaps;
-    });
-  };
-
   const handleGenerateChordsAI = async () => {
     if (!selectedSongId) return;
     setIsGeneratingAI(true);
@@ -99,7 +72,6 @@ export default function StemStudio() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           songId: selectedSongId,
-          manualBpm: manualBpm ? parseFloat(manualBpm) : undefined,
           manualKey: manualKey || undefined,
           timeSignature
         })
@@ -221,19 +193,6 @@ export default function StemStudio() {
               
               <div className="space-y-4 relative z-10">
                 <div className="flex space-x-2">
-                  <div className="flex-1">
-                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1 block">BPM Real (Opcional)</label>
-                    <div className="flex space-x-1">
-                      <input type="number" value={manualBpm} onChange={(e) => setManualBpm(e.target.value)} placeholder="Ej: 97" className="w-full bg-[#111] border border-[#333] rounded-l px-3 py-2 text-xs text-white focus:border-purple-500 outline-none transition" />
-                      <button 
-                        onClick={handleTap}
-                        className="bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 px-4 rounded-r text-[10px] font-bold tracking-wider transition active:scale-95 border border-purple-500/30"
-                        title="Haz clic varias veces al ritmo de la música"
-                      >
-                        TAP
-                      </button>
-                    </div>
-                  </div>
                   <div className="flex-1">
                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1 block">Compás</label>
                     <select value={timeSignature} onChange={(e) => setTimeSignature(e.target.value)} className="w-full bg-[#111] border border-[#333] rounded px-3 py-2 text-xs text-white focus:border-purple-500 outline-none transition">

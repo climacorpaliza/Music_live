@@ -58,6 +58,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
   const clickLowBufferRef = useRef<AudioBuffer | null>(null);
   const cueSources = useRef<AudioBufferSourceNode[]>([]);
   const cueBuffersRef = useRef<Record<string, AudioBuffer>>({});
+  const cueOffsetsRef = useRef<Record<string, number>>({});
   
   // Referencias para el auto-play al buscar
   const prompterDataRef = useRef<any>(null);
@@ -222,7 +223,16 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
              const res = await fetch(`/cues/${name}.mp3`);
              if (res.ok) {
                const arrayBuffer = await res.arrayBuffer();
-               cueBuffersRef.current[name] = await audioContext.current!.decodeAudioData(arrayBuffer);
+               const audioBuffer = await audioContext.current!.decodeAudioData(arrayBuffer);
+               cueBuffersRef.current[name] = audioBuffer;
+               
+               // Auto-Trim: Detectar el inicio real de la voz para saltar el silencio (padding del MP3)
+               const data = audioBuffer.getChannelData(0);
+               let startSample = 0;
+               for (let i = 0; i < data.length; i++) {
+                  if (Math.abs(data[i]) > 0.05) { startSample = i; break; }
+               }
+               cueOffsetsRef.current[name] = startSample / audioBuffer.sampleRate;
              }
          }
        } catch (e) {
@@ -426,6 +436,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
          
          const schedule = (bufName: string, bIdx: number) => {
             const buf = cueBuffersRef.current[bufName];
+            const cueOffset = cueOffsetsRef.current[bufName] || 0;
             if (buf && bIdx >= 0 && bIdx < bTimes.length) {
                const absoluteTime = bTimes[bIdx] + manualOffset;
                if (absoluteTime >= globalOffset) {
@@ -439,7 +450,8 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
                   if (masterGain) gain.connect(masterGain);
                   else gain.connect(audioContext.current!.destination);
                   
-                  source.start(now + (absoluteTime - globalOffset));
+                  // Iniciar la reproducción saltando exactamente el silencio detectado en el cueOffset
+                  source.start(now + (absoluteTime - globalOffset), cueOffset);
                   cueSources.current.push(source);
                }
             }
