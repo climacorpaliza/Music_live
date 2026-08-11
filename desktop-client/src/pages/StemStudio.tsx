@@ -166,8 +166,8 @@ export default function StemStudio() {
       const { predictionId, prompterData } = data;
       setAiSuccessMessage(`Modelo iniciado... Procesando acordes en la nube.`);
 
-      // 3. POLLING: Consultar a Vercel cada 3 segundos sin causar Timeout
-      const pollInterval = setInterval(async () => {
+      // 3. POLLING: Consultar a Vercel recursivamente para no saturar las conexiones (Timeout evasion)
+      const poll = async () => {
         try {
           const statusRes = await fetch('/api/ai/status', {
             method: 'POST',
@@ -183,20 +183,22 @@ export default function StemStudio() {
           if (!statusRes.ok) throw new Error(statusData.error || 'Error en polling');
 
           if (statusData.done) {
-            clearInterval(pollInterval);
             setIsGeneratingAI(false);
             setAiSuccessMessage("¡Acordes generados y guardados en la nube exitosamente!");
             setTimeout(() => setAiSuccessMessage(null), 5000);
           } else {
             setAiSuccessMessage(`IA Procesando... Estado: ${statusData.status}`);
+            setTimeout(poll, 3000);
           }
         } catch (pollErr: any) {
-          clearInterval(pollInterval);
           setIsGeneratingAI(false);
           console.error("Error en polling:", pollErr);
           alert(`Falló la comprobación de IA: ${pollErr.message}`);
         }
-      }, 3000);
+      };
+      
+      // Iniciar el polling
+      setTimeout(poll, 3000);
 
     } catch (error: any) {
       console.error("Error saving AI chords:", error);
