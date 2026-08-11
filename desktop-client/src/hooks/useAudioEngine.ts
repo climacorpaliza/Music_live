@@ -14,6 +14,19 @@ export interface StemTrack {
   targetOutputChannel?: number; // Used in MultiChannel mode
 }
 
+const generateClickBuffer = (ctx: AudioContext, frequency: number) => {
+  const sampleRate = ctx.sampleRate;
+  const duration = 0.05;
+  const buffer = ctx.createBuffer(1, sampleRate * duration, sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    const t = i / sampleRate;
+    const env = Math.exp(-t * 60); 
+    data[i] = Math.sin(2 * Math.PI * frequency * t) * env * 0.8;
+  }
+  return buffer;
+};
+
 export const useAudioEngine = (initialStems: StemTrack[]) => {
   const audioContext = useRef<AudioContext | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -39,7 +52,9 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
   const preRollDurationRef = useRef(0);
   
   // Referencias para programación en tiempo real
-  const clickOscillators = useRef<OscillatorNode[]>([]);
+  const clickSources = useRef<AudioBufferSourceNode[]>([]);
+  const clickHighBufferRef = useRef<AudioBuffer | null>(null);
+  const clickLowBufferRef = useRef<AudioBuffer | null>(null);
   const cueSources = useRef<AudioBufferSourceNode[]>([]);
   const cueBuffersRef = useRef<Record<string, AudioBuffer>>({});
   
@@ -54,6 +69,9 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
   useEffect(() => {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     audioContext.current = new AudioContextClass();
+    
+    clickHighBufferRef.current = generateClickBuffer(audioContext.current, 1200);
+    clickLowBufferRef.current = generateClickBuffer(audioContext.current, 800);
     
     const handleDeviceChange = async () => {
       console.warn("Hardware device change detected! Suspending audio to prevent bleeding.");
@@ -256,8 +274,8 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     });
     
     // B. Reproducir Click (Tiempo Real)
-    clickOscillators.current.forEach(osc => { try { osc.stop(); } catch(e) {} });
-    clickOscillators.current = [];
+    clickSources.current.forEach(src => { try { src.stop(); } catch(e) {} });
+    clickSources.current = [];
     
     // Obtener el nodo de Ganancia/Paneo del click
     const clickStem = stems.find(s => s.id === 'synthetic-click');
@@ -271,6 +289,11 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       if (prompterData.beatTimes && prompterData.beatTimes.length > 0) {
          for (let i = beatsPerMeasure; i > 0; i--) shiftedBeatTimes.push(preRollDuration - (i * beatInterval));
          shiftedBeatTimes = [...shiftedBeatTimes, ...prompterData.beatTimes.map((t: number) => t + preRollDuration)];
+      } else {
+         const maxTime = preRollDuration + (totalDuration > 0 ? totalDuration : 600);
+         for (let t = preRollDuration - (beatsPerMeasure * beatInterval); t <= maxTime; t += beatInterval) {
+             if (t >= 0) shiftedBeatTimes.push(t);
+         }
       }
 
       const gridOffsetTime = (prompterData.firstBeatOffset || 0) + manualGridOffset;
@@ -280,23 +303,20 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       for (const time of shiftedBeatTimes) {
         const adjustedTime = time + manualOffset;
         if (adjustedTime >= globalOffset) {
-          const osc = audioContext.current.createOscillator();
-          const gain = audioContext.current.createGain();
+          const isHigh = beatCount % beatsPerMeasure === 0;
+          const buffer = isHigh ? clickHighBufferRef.current : clickLowBufferRef.current;
           
-          osc.frequency.value = (beatCount % beatsPerMeasure === 0) ? 1200 : 800;
-          
-          // Envolvente de decaimiento
-          gain.gain.setValueAtTime(0.7, audioContext.current.currentTime + (adjustedTime - globalOffset));
-          gain.gain.exponentialRampToValueAtTime(0.01, audioContext.current.currentTime + (adjustedTime - globalOffset) + 0.05);
-          
-          osc.connect(gain);
-          const masterGain = gainNodes.current.get('synthetic-click');
-          if (masterGain) gain.connect(masterGain);
-          else gain.connect(audioContext.current.destination);
-          
-          osc.start(audioContext.current.currentTime + (adjustedTime - globalOffset));
-          osc.stop(audioContext.current.currentTime + (adjustedTime - globalOffset) + 0.06);
-          clickOscillators.current.push(osc);
+          if (buffer && audioContext.current) {
+            const source = audioContext.current.createBufferSource();
+            source.buffer = buffer;
+            
+            const masterGain = gainNodes.current.get('synthetic-click');
+            if (masterGain) source.connect(masterGain);
+            else source.connect(audioContext.current.destination);
+            
+            source.start(audioContext.current.currentTime + (adjustedTime - globalOffset));
+            clickSources.current.push(source);
+          }
         }
         beatCount++;
       }
@@ -309,12 +329,20 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     const cueStem = stems.find(s => s.id === 'synthetic-cues');
     const isCueMuted = cueStem ? cueStem.muted || (stems.some(s => s.solo) && !cueStem.solo) : false;
     
-    if (prompterData && prompterData.sections && prompterData.beatTimes && !isCueMuted) {
+    if (prompterData && prompterData.sections && !isCueMuted && prompterData.bpm) {
       const beatInterval = 60 / prompterData.bpm;
       const beatsPerMeasure = parseInt(prompterData.timeSignature?.split('/')[0]) || 4;
       let bTimes: number[] = [];
-      for (let i = beatsPerMeasure; i > 0; i--) bTimes.push(preRollDuration - (i * beatInterval));
-      bTimes = [...bTimes, ...prompterData.beatTimes.map((t: number) => t + preRollDuration)];
+      
+      if (prompterData.beatTimes && prompterData.beatTimes.length > 0) {
+         for (let i = beatsPerMeasure; i > 0; i--) bTimes.push(preRollDuration - (i * beatInterval));
+         bTimes = [...bTimes, ...prompterData.beatTimes.map((t: number) => t + preRollDuration)];
+      } else {
+         const maxTime = preRollDuration + (totalDuration > 0 ? totalDuration : 600);
+         for (let t = preRollDuration - (beatsPerMeasure * beatInterval); t <= maxTime; t += beatInterval) {
+             if (t >= 0) bTimes.push(t);
+         }
+      }
 
       const gridOffsetTime = (prompterData.firstBeatOffset || 0) + manualGridOffset;
       const manualOffset = (prompterData.beatTimes && prompterData.beatTimes.length > 0) ? (gridOffsetTime - prompterData.beatTimes[0]) : 0;
@@ -373,7 +401,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     sourceNodes.current.forEach(source => {
       try { source.stop(); } catch (e) {}
     });
-    clickOscillators.current.forEach(osc => { try { osc.stop(); } catch (e) {} });
+    clickSources.current.forEach(src => { try { src.stop(); } catch (e) {} });
     cueSources.current.forEach(src => { try { src.stop(); } catch (e) {} });
     
     pauseTime.current = audioContext.current.currentTime - startTime.current;
