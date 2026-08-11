@@ -102,7 +102,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const currentBpm = prompterData.bpm;
     const finalBpm = currentBpm !== 99 && currentBpm !== 120 ? currentBpm : (harmonicBpm || currentBpm);
     
-    prompterData.bpm = Number(finalBpm.toFixed(2));
+    prompterData.bpm = Number(Number(finalBpm).toFixed(2));
     prompterData.chords = finalChords;
 
     console.log('[IA-Status] PrompterData Final ensamblado. Guardando en Supabase...');

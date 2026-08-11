@@ -29,7 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!selectedStem) selectedStem = stems.find((s: any) => s.name.toLowerCase().includes('master') || s.name.toLowerCase().includes('mezcla') || s.name.toLowerCase().includes('full'));
     if (!selectedStem) selectedStem = stems.find((s: any) => !s.name.toLowerCase().includes('click') && !s.name.toLowerCase().includes('drum')) || stems[0];
 
-    const finalCalculatedBpm = detectedBpm || 120;
+    const finalCalculatedBpm = Number(detectedBpm) || 120;
     const extractedFirstBeat = firstBeat || 0.0;
     const extractedBeatTimes = beatTimes || [];
     const finalCalculatedKey = manualKey || "C Major";
