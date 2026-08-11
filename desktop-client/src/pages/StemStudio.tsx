@@ -167,6 +167,7 @@ export default function StemStudio() {
       setAiSuccessMessage(`Modelo iniciado... Procesando acordes en la nube.`);
 
       // 3. POLLING: Consultar a Vercel recursivamente para no saturar las conexiones (Timeout evasion)
+      let pollCount = 1;
       const poll = async () => {
         try {
           const statusRes = await fetch('/api/ai/status', {
@@ -187,7 +188,8 @@ export default function StemStudio() {
             setAiSuccessMessage("¡Acordes generados y guardados en la nube exitosamente!");
             setTimeout(() => setAiSuccessMessage(null), 5000);
           } else {
-            setAiSuccessMessage(`IA Procesando... Estado: ${statusData.status}`);
+            setAiSuccessMessage(`IA Procesando... Estado: ${statusData.status} (Intento ${pollCount})`);
+            pollCount++;
             setTimeout(poll, 3000);
           }
         } catch (pollErr: any) {

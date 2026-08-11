@@ -25,6 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log(`[IA-Status] Consultando Replicate para predictionId: ${predictionId}`);
     const prediction = await replicate.predictions.get(predictionId);
+    console.log(`[IA-Status] Replicate respondió con status: ${prediction.status}`);
     
     if (prediction.status !== 'succeeded') {
       if (prediction.status === 'failed' || prediction.status === 'canceled') {
