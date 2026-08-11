@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import StemUploader from '../components/StemUploader';
 import { Music, FolderPlus, Disc3, FileAudio, Loader2, Trash2, Sparkles, CheckCircle, RefreshCw } from 'lucide-react';
+// @ts-ignore
 import MusicTempo from 'music-tempo';
 
 const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
