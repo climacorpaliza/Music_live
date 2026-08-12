@@ -738,22 +738,23 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       const fohBlob = await renderMix(true);
       const cueBlob = await renderMix(false);
 
-      onProgress('Subiendo FOH a la nube...');
-      const fohFile = new File([fohBlob], `${songId}_foh.wav`, { type: 'audio/wav' });
-      const { data: fohData, error: fohError } = await import('../lib/supabase').then(m => m.supabase.storage.from('stems').upload(`exports/${songId}_foh_${Date.now()}.wav`, fohFile));
+      const fohPath = `mixes/${bandId}/${songId}/foh_${Date.now()}.wav`;
+      const { error: fohError } = await import('../lib/supabase').then(m => m.supabase.storage
+        .from('audios')
+        .upload(fohPath, fohBlob, { contentType: 'audio/wav', upsert: true }));
       if (fohError) throw fohError;
+      const fohUrl = await import('../lib/supabase').then(m => m.supabase.storage.from('audios').getPublicUrl(fohPath).data.publicUrl);
       
       onProgress('Subiendo CUE a la nube...');
-      const cueFile = new File([cueBlob], `${songId}_cue.wav`, { type: 'audio/wav' });
-      const { data: cueData, error: cueError } = await import('../lib/supabase').then(m => m.supabase.storage.from('stems').upload(`exports/${songId}_cue_${Date.now()}.wav`, cueFile));
+      const cuePath = `mixes/${bandId}/${songId}/cue_${Date.now()}.wav`;
+      const { error: cueError } = await import('../lib/supabase').then(m => m.supabase.storage
+        .from('audios')
+        .upload(cuePath, cueBlob, { contentType: 'audio/wav', upsert: true }));
       if (cueError) throw cueError;
-
-      const { supabase } = await import('../lib/supabase');
-      const fohUrl = supabase.storage.from('stems').getPublicUrl(fohData.path).data.publicUrl;
-      const cueUrl = supabase.storage.from('stems').getPublicUrl(cueData.path).data.publicUrl;
+      const cueUrl = await import('../lib/supabase').then(m => m.supabase.storage.from('audios').getPublicUrl(cuePath).data.publicUrl);
 
       onProgress('Guardando URLs en la base de datos...');
-      await supabase.from('songs').update({
+      await import('../lib/supabase').then(m => m.supabase.from('songs').update({
         foh_mix_url: fohUrl,
         cue_mix_url: cueUrl
       }).eq('id', songId);
