@@ -6,48 +6,31 @@ self.onmessage = function(e) {
     const { buffer, sampleRate } = e.data;
     const audioData = new Float32Array(buffer);
     
-    // Procesamos en bloques de 60 segundos para evitar que la memoria RAM se desborde y congele la PC
-    const CHUNK_SECONDS = 60;
-    const chunkSamples = sampleRate * CHUNK_SECONDS;
+    // Ejecutamos el análisis de tempo orgánico en la canción COMPLETA
+    // Esto evita los "golpes dobles" y saltos de compás que ocurren en las fronteras
+    const mt = new MusicTempo(audioData);
+    let bpm = Number(mt.tempo);
+    let beats = mt.beats.map(Number);
     
-    let allBeats: number[] = [];
-    let avgBpm = 0;
-    let bpmCount = 0;
-
-    for (let offset = 0; offset < audioData.length; offset += chunkSamples) {
-      const chunk = audioData.slice(offset, offset + chunkSamples);
-      if (chunk.length < sampleRate * 5) continue; // Ignorar bloques muy pequeños (<5s) al final
-
-      const mt = new MusicTempo(chunk);
-      let chunkBpm = Number(mt.tempo);
-      let chunkBeats = mt.beats.map(Number);
-      
-      // Auto-Corrección de Falsos Positivos de Doble Tiempo
-      if (chunkBpm > 150) {
-        chunkBpm = chunkBpm / 2.0;
-        chunkBeats = chunkBeats.filter((_: any, index: number) => index % 2 === 0);
-      }
-
-      const timeOffset = offset / sampleRate;
-      chunkBeats = chunkBeats.map((b: number) => b + timeOffset);
-      
-      allBeats = allBeats.concat(chunkBeats);
-      avgBpm += chunkBpm;
-      bpmCount++;
+    // Auto-Corrección de Falsos Positivos de Doble Tiempo
+    // Si la batería es muy agresiva (> 150 BPM), asumimos que el modelo contó subdivisiones (1 y 2 y 3 y 4)
+    if (bpm > 150) {
+      bpm = bpm / 2.0;
+      // Filtramos la grilla para que mantenga solo los golpes fuertes reales (los downbeats)
+      beats = beats.filter((_: any, index: number) => index % 2 === 0);
     }
 
-    if (bpmCount === 0) {
+    if (beats.length === 0) {
       throw new Error("No se pudo detectar el tempo en ninguna sección del audio.");
     }
 
-    const finalBpm = avgBpm / bpmCount;
-    let firstBeat = allBeats.length > 0 ? allBeats[0] : 0.0;
+    let firstBeat = beats.length > 0 ? beats[0] : 0.0;
 
-    // Redondeo de precisión para evitar flotantes largos en BD
-    allBeats = allBeats.map((t: number) => Number(t.toFixed(3)));
+    // Redondeo de precisión para evitar flotantes largos en la Base de Datos
+    beats = beats.map((t: number) => Number(t.toFixed(3)));
     firstBeat = Number(firstBeat.toFixed(3));
     
-    self.postMessage({ success: true, bpm: finalBpm, firstBeat, beatTimes: allBeats });
+    self.postMessage({ success: true, bpm, firstBeat, beatTimes: beats });
   } catch (error: any) {
     self.postMessage({ success: false, error: error.message });
   }
