@@ -74,6 +74,16 @@ export default function Layout() {
             <ListMusic size={20} />
             <span className="font-medium">Setlists</span>
           </NavLink>
+
+          <a 
+            href="/mobile" 
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-300 text-gray-400 hover:bg-white/5 hover:text-white mt-4 border border-dashed border-gray-600"
+          >
+            <MonitorPlay size={20} className="text-gray-500" />
+            <span className="font-medium text-sm">Abrir In-Ear (Prueba)</span>
+          </a>
         </div>
 
         <div className="p-4 border-t border-white/5 bg-black/20">
