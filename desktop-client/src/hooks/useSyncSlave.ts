@@ -13,8 +13,9 @@ export function useSyncSlave(bandId: string) {
   
   // Transport control signals triggered by Master
   const [playTrigger, setPlayTrigger] = useState<{ startAt: number, offset: number } | null>(null);
-  const [pauseTrigger, setPauseTrigger] = useState<{ time: number } | null>(null);
+  const [pauseTrigger, setPauseTrigger] = useState<boolean>(false);
   const [seekTrigger, setSeekTrigger] = useState<{ offset: number } | null>(null);
+  const [clockOffset, setClockOffset] = useState<number>(0);
 
   useEffect(() => {
     if (!bandId) return;
@@ -37,7 +38,7 @@ export function useSyncSlave(bandId: string) {
               setCurrentSongId(msg.songId);
               setSongData(msg.songData);
               setIsPlaying(false);
-              setPauseTrigger({ time: Date.now() }); // Force pause
+              setPauseTrigger(true);
             }
             break;
           case 'PLAY':
@@ -47,7 +48,7 @@ export function useSyncSlave(bandId: string) {
             }
             break;
           case 'PAUSE':
-            setPauseTrigger({ time: Date.now() });
+            setPauseTrigger(true);
             setIsPlaying(false);
             break;
           case 'SEEK':
@@ -56,12 +57,29 @@ export function useSyncSlave(bandId: string) {
             }
             break;
         }
-      })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          channel.track({ isMaster: false });
-        }
       });
+
+    // NTP Synchronization (Slave Side)
+    channel.on('broadcast', { event: 'sync_response' }, ({ payload }) => {
+      const t2 = Date.now();
+      const rtt = t2 - payload.t0; // Round trip time
+      const latency = rtt / 2; // One-way latency
+      const masterTime = payload.t1 + latency;
+      const offset = masterTime - Date.now();
+      setClockOffset(offset);
+    });
+
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        channel.track({ isMaster: false });
+        // Send initial sync ping
+        channel.send({
+          type: 'broadcast',
+          event: 'sync_request',
+          payload: { t0: Date.now() }
+        });
+      }
+    });
 
     channelRef.current = channel;
 
@@ -76,6 +94,7 @@ export function useSyncSlave(bandId: string) {
     isPlaying,
     playTrigger,
     pauseTrigger,
-    seekTrigger
+    seekTrigger,
+    clockOffset
   };
 }

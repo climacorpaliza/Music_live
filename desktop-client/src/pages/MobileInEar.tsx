@@ -1,36 +1,49 @@
 import { useEffect, useState, useRef } from 'react';
 import { useSyncSlave } from '../hooks/useSyncSlave';
-import { Volume2, Power, Music, Activity } from 'lucide-react';
+import { Volume2, Power, Music, Activity, Headphones } from 'lucide-react';
 import { Prompter } from '../components/Prompter';
 
 const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 
 export default function MobileInEar() {
-  const { songData, isPlaying, playTrigger, pauseTrigger, seekTrigger } = useSyncSlave(FAKE_BAND_ID);
+  const { songData, isPlaying, playTrigger, pauseTrigger, seekTrigger, clockOffset } = useSyncSlave(FAKE_BAND_ID);
   
   const [hasInteracted, setHasInteracted] = useState(false);
   const [audioCtx, setAudioCtx] = useState<AudioContext | null>(null);
+  
   const [cueBuffer, setCueBuffer] = useState<AudioBuffer | null>(null);
+  const [fohBuffer, setFohBuffer] = useState<AudioBuffer | null>(null);
   const [loadStatus, setLoadStatus] = useState<string>('Esperando Master...');
   
-  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
-  const gainRef = useRef<GainNode | null>(null);
+  const cueSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const fohSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  
+  const cueGainRef = useRef<GainNode | null>(null);
+  const fohGainRef = useRef<GainNode | null>(null);
   
   const [currentTime, setCurrentTime] = useState(0);
   const startTimeRef = useRef(0);
   const animationFrameRef = useRef(0);
-  const [volume, setVolume] = useState(1);
+  
+  const [cueVolume, setCueVolume] = useState(1);
+  const [bandVolume, setBandVolume] = useState(0.8);
 
   // Initialize AudioContext on first tap
   const handleConnect = () => {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     const ctx = new AudioContextClass();
-    const gain = ctx.createGain();
-    gain.connect(ctx.destination);
-    gain.gain.value = volume;
+    
+    const cGain = ctx.createGain();
+    cGain.connect(ctx.destination);
+    cGain.gain.value = cueVolume;
+    cueGainRef.current = cGain;
+
+    const fGain = ctx.createGain();
+    fGain.connect(ctx.destination);
+    fGain.gain.value = bandVolume;
+    fohGainRef.current = fGain;
     
     setAudioCtx(ctx);
-    gainRef.current = gain;
     setHasInteracted(true);
     
     // Play a tiny silent buffer to unlock audio on iOS
@@ -42,27 +55,45 @@ export default function MobileInEar() {
   };
 
   useEffect(() => {
-    if (gainRef.current) {
-      gainRef.current.gain.value = volume;
-    }
-  }, [volume]);
+    if (cueGainRef.current) cueGainRef.current.gain.value = cueVolume;
+  }, [cueVolume]);
+
+  useEffect(() => {
+    if (fohGainRef.current) fohGainRef.current.gain.value = bandVolume;
+  }, [bandVolume]);
 
   // Load new song when Master says LOAD_SONG
   useEffect(() => {
     if (songData && audioCtx) {
-      loadAudio(songData.cue_mix_url);
+      loadAudio(songData.cue_mix_url, songData.foh_mix_url);
     }
   }, [songData, audioCtx]);
 
-  const loadAudio = async (url: string) => {
+  const loadAudio = async (cueUrl: string, fohUrl: string) => {
     if (!audioCtx) return;
-    setLoadStatus('Descargando...');
+    setLoadStatus('Descargando multitrack...');
     try {
-      const res = await fetch(url);
-      const array = await res.arrayBuffer();
-      setLoadStatus('Decodificando...');
-      const buffer = await audioCtx.decodeAudioData(array);
-      setCueBuffer(buffer);
+      // Download both files in parallel for speed
+      const [cueRes, fohRes] = await Promise.all([
+        fetch(cueUrl),
+        fetch(fohUrl)
+      ]);
+      
+      const [cueArray, fohArray] = await Promise.all([
+        cueRes.arrayBuffer(),
+        fohRes.arrayBuffer()
+      ]);
+
+      setLoadStatus('Decodificando audio...');
+      
+      const [cBuffer, fBuffer] = await Promise.all([
+        audioCtx.decodeAudioData(cueArray),
+        audioCtx.decodeAudioData(fohArray)
+      ]);
+      
+      setCueBuffer(cBuffer);
+      setFohBuffer(fBuffer);
+      
       setLoadStatus('Listo (Standby)');
       setCurrentTime(0);
     } catch (e: any) {
@@ -72,24 +103,31 @@ export default function MobileInEar() {
 
   // Handle Transport Triggers
   useEffect(() => {
-    if (!audioCtx || !cueBuffer || !hasInteracted) return;
+    if (!audioCtx || !cueBuffer || !fohBuffer || !hasInteracted) return;
 
     if (playTrigger) {
-      // PLAY TRIGGER RECEIVED
-      if (sourceRef.current) {
-        try { sourceRef.current.stop(); } catch (e) {}
-      }
+      // Stop previous sources
+      try { cueSourceRef.current?.stop(); } catch (e) {}
+      try { fohSourceRef.current?.stop(); } catch (e) {}
 
-      const source = audioCtx.createBufferSource();
-      source.buffer = cueBuffer;
-      source.connect(gainRef.current!);
-      sourceRef.current = source;
+      // Create new sources
+      const cSource = audioCtx.createBufferSource();
+      cSource.buffer = cueBuffer;
+      cSource.connect(cueGainRef.current!);
+      cueSourceRef.current = cSource;
 
-      // Calculate when to start
-      const timeUntilStartMs = Math.max(0, playTrigger.startAt - Date.now());
+      const fSource = audioCtx.createBufferSource();
+      fSource.buffer = fohBuffer;
+      fSource.connect(fohGainRef.current!);
+      fohSourceRef.current = fSource;
+
+      // Calculate when to start with NTP clock offset correction!
+      const correctedClientTime = Date.now() + clockOffset;
+      const timeUntilStartMs = Math.max(0, playTrigger.startAt - correctedClientTime);
       const exactContextTime = audioCtx.currentTime + (timeUntilStartMs / 1000);
 
-      source.start(exactContextTime, playTrigger.offset);
+      cSource.start(exactContextTime, playTrigger.offset);
+      fSource.start(exactContextTime, playTrigger.offset);
       
       startTimeRef.current = exactContextTime - playTrigger.offset;
       
@@ -101,9 +139,8 @@ export default function MobileInEar() {
 
   useEffect(() => {
     if (pauseTrigger) {
-      if (sourceRef.current) {
-        try { sourceRef.current.stop(); } catch (e) {}
-      }
+      try { cueSourceRef.current?.stop(); } catch (e) {}
+      try { fohSourceRef.current?.stop(); } catch (e) {}
       cancelAnimationFrame(animationFrameRef.current);
       setLoadStatus('Pausado');
     }
@@ -118,10 +155,7 @@ export default function MobileInEar() {
   const updateTime = () => {
     if (!audioCtx) return;
     
-    // In strict PWA, if the screen locks, requestAnimationFrame might throttle.
-    // However, Web Audio keeps playing. We just update the visual time.
     const globalTime = audioCtx.currentTime - startTimeRef.current;
-    
     const preRoll = getPreRoll(songData);
     const visualTime = globalTime - preRoll;
     
@@ -140,15 +174,15 @@ export default function MobileInEar() {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-[#0a0a0a] text-white">
         <div className="p-4 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl mb-8 shadow-lg shadow-blue-500/20">
-          <Music size={48} className="text-white" />
+          <Headphones size={48} className="text-white" />
         </div>
-        <h1 className="text-3xl font-black tracking-wider mb-2">IN-EAR MÓVIL</h1>
-        <p className="text-gray-400 mb-12 text-center max-w-xs">
-          Sistema personal de monitoreo e In-Ears.
+        <h1 className="text-3xl font-black tracking-wider mb-2 text-center">IN-EAR MÓVIL</h1>
+        <p className="text-gray-400 mb-12 text-center max-w-xs leading-relaxed">
+          Sistema personal de monitoreo sin latencia.
         </p>
         <button 
           onClick={handleConnect}
-          className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-12 rounded-full text-xl flex items-center shadow-[0_0_30px_rgba(37,99,235,0.4)] transition-all"
+          className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-5 px-14 rounded-full text-xl flex items-center shadow-[0_0_40px_rgba(37,99,235,0.4)] transition-all"
         >
           <Power className="mr-3" />
           CONECTAR
@@ -161,30 +195,47 @@ export default function MobileInEar() {
     <div className="flex flex-col h-screen bg-black text-white relative">
       
       {/* Top Header */}
-      <div className="flex items-center justify-between p-4 bg-[#111] border-b border-[#222] z-20">
-        <div className="flex items-center space-x-3">
-          <div className="p-2 bg-blue-500/20 rounded-lg">
-            <Volume2 size={20} className="text-blue-400" />
+      <div className="flex items-center justify-between p-3 bg-[#111] border-b border-[#222] z-20">
+        <div className="flex items-center space-x-3 w-1/3">
+          <div className="p-2 bg-blue-500/20 rounded-lg shrink-0">
+            <Activity size={18} className="text-blue-400" />
           </div>
-          <div>
-            <h2 className="font-bold text-sm leading-tight truncate w-32">
+          <div className="overflow-hidden">
+            <h2 className="font-bold text-xs leading-tight truncate">
               {songData ? songData.title : 'Esperando Master...'}
             </h2>
-            <div className="flex items-center text-[10px] uppercase font-bold tracking-widest text-gray-500">
-              <Activity size={10} className="mr-1" /> {loadStatus}
+            <div className="text-[9px] uppercase font-bold tracking-widest text-gray-500 truncate">
+              {loadStatus}
             </div>
           </div>
         </div>
         
         {/* Personal Mixer */}
-        <div className="flex items-center w-32">
-          <input 
-            type="range" 
-            min="0" max="1" step="0.05"
-            value={volume}
-            onChange={e => setVolume(parseFloat(e.target.value))}
-            className="w-full accent-blue-500"
-          />
+        <div className="flex flex-col space-y-2 w-2/3 max-w-[200px] bg-black/40 p-2 rounded-lg border border-white/5">
+          {/* CUE Volume */}
+          <div className="flex items-center space-x-2">
+            <Volume2 size={12} className="text-blue-400 shrink-0" />
+            <span className="text-[10px] font-bold text-gray-400 w-12 shrink-0">CUE</span>
+            <input 
+              type="range" 
+              min="0" max="1" step="0.05"
+              value={cueVolume}
+              onChange={e => setCueVolume(parseFloat(e.target.value))}
+              className="w-full accent-blue-500 h-1"
+            />
+          </div>
+          {/* FOH (Band) Volume */}
+          <div className="flex items-center space-x-2">
+            <Music size={12} className="text-purple-400 shrink-0" />
+            <span className="text-[10px] font-bold text-gray-400 w-12 shrink-0">BANDA</span>
+            <input 
+              type="range" 
+              min="0" max="1" step="0.05"
+              value={bandVolume}
+              onChange={e => setBandVolume(parseFloat(e.target.value))}
+              className="w-full accent-purple-500 h-1"
+            />
+          </div>
         </div>
       </div>
 
@@ -204,13 +255,16 @@ export default function MobileInEar() {
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-5">
-            <Music size={200} />
+            <Headphones size={200} />
           </div>
         )}
         
         {!isPlaying && (
-          <div className="absolute inset-0 bg-black/50 flex items-center justify-center backdrop-blur-[2px] z-30">
-            <p className="text-xl font-bold tracking-widest text-white/50">STANDBY</p>
+          <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-[4px] z-30">
+            <div className="flex flex-col items-center">
+              <Activity size={32} className="text-gray-600 mb-2 animate-pulse" />
+              <p className="text-xl font-black tracking-[0.3em] text-white/50">STANDBY</p>
+            </div>
           </div>
         )}
       </div>

@@ -39,6 +39,18 @@ export function useSyncMaster(bandId: string) {
         }
       });
 
+    // NTP Time Synchronization (Master Side)
+    channel.on('broadcast', { event: 'sync_request' }, ({ payload }) => {
+      channel.send({
+        type: 'broadcast',
+        event: 'sync_response',
+        payload: {
+          t0: payload.t0,
+          t1: Date.now()
+        }
+      });
+    });
+
     channelRef.current = channel;
 
     return () => {
