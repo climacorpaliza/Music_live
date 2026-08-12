@@ -738,7 +738,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       const fohBlob = await renderMix(true);
       const cueBlob = await renderMix(false);
 
-      const fohPath = `mixes/${bandId}/${songId}/foh_${Date.now()}.wav`;
+      const fohPath = `${bandId}/${songId}/mixes/foh_${Date.now()}.wav`;
       const { error: fohError } = await import('../lib/supabase').then(m => m.supabase.storage
         .from('audios')
         .upload(fohPath, fohBlob, { contentType: 'audio/wav', upsert: true }));
@@ -746,7 +746,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       const fohUrl = await import('../lib/supabase').then(m => m.supabase.storage.from('audios').getPublicUrl(fohPath).data.publicUrl);
       
       onProgress('Subiendo CUE a la nube...');
-      const cuePath = `mixes/${bandId}/${songId}/cue_${Date.now()}.wav`;
+      const cuePath = `${bandId}/${songId}/mixes/cue_${Date.now()}.wav`;
       const { error: cueError } = await import('../lib/supabase').then(m => m.supabase.storage
         .from('audios')
         .upload(cuePath, cueBlob, { contentType: 'audio/wav', upsert: true }));

@@ -237,7 +237,7 @@ export default function StemStudio() {
     
     try {
       // 1. Upload to Supabase Storage temporarily
-      const storagePath = `temp/${Date.now()}_${file.name}`;
+      const storagePath = `${FAKE_BAND_ID}/temp/${Date.now()}_${file.name}`;
       const { error: uploadError } = await supabase.storage.from('audios').upload(storagePath, file);
       if (uploadError) throw uploadError;
 
