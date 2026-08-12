@@ -3,7 +3,7 @@ import MusicTempo from 'music-tempo';
 
 self.onmessage = function(e) {
   try {
-    const { buffer, sampleRate } = e.data;
+    const { buffer } = e.data;
     const audioData = new Float32Array(buffer);
     
     // Ejecutamos el análisis de tempo orgánico en la canción COMPLETA
