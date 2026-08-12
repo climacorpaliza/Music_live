@@ -85,10 +85,10 @@ export default function LivePrompter() {
             name: stem.name,
             type: type,
             url: stem.file_url,
-            volume: 0.8,
-            pan: 0,
-            muted: false,
-            solo: false,
+            volume: stem.metadata?.volume !== undefined ? stem.metadata.volume : 0.8,
+            pan: stem.metadata?.pan !== undefined ? stem.metadata.pan : 0,
+            muted: stem.metadata?.muted !== undefined ? stem.metadata.muted : false,
+            solo: stem.metadata?.solo !== undefined ? stem.metadata.solo : false,
             targetOutputChannel: 0
           };
         });
@@ -140,6 +140,29 @@ export default function LivePrompter() {
       console.error(error);
     } finally {
       setIsDownloading(false);
+    }
+  };
+
+  const handleSaveMixConfig = async () => {
+    if (!selectedSongId) return;
+    try {
+      const updates = stems.filter(s => s.id !== 'synthetic-click' && s.id !== 'synthetic-cues').map(s => {
+        // Encontrar el stem original en dbStems para no sobreescribir metadata importante
+        const originalStem = dbStems.find((dbS: any) => dbS.id === s.id);
+        const newMetadata = {
+          ...(originalStem?.metadata || {}),
+          volume: s.volume,
+          pan: s.pan,
+          muted: s.muted,
+          solo: s.solo
+        };
+        return supabase.from('stems').update({ metadata: newMetadata }).eq('id', s.id);
+      });
+
+      await Promise.all(updates);
+      alert('¡Configuración de mezcla guardada exitosamente!');
+    } catch (err: any) {
+      alert(`Error al guardar configuración: ${err.message}`);
     }
   };
 
@@ -234,7 +257,7 @@ export default function LivePrompter() {
   };
 
   const toggleSolo = (stemId: string) => {
-    setStems((prev: any[]) => prev.map((s: any) => s.id === stemId ? { ...s, soloed: !s.soloed } : s));
+    setStems((prev: any[]) => prev.map((s: any) => s.id === stemId ? { ...s, solo: !s.solo } : s));
   };
 
   const formatTime = (time: number) => {
@@ -687,10 +710,16 @@ export default function LivePrompter() {
                 
                 <button 
                   onClick={handleExportLiveMix}
-                  disabled={!audioLoaded || isExporting}
-                  className="ml-4 bg-purple-600 hover:bg-purple-500 text-white px-3 py-1 rounded text-xs font-bold transition disabled:opacity-50 flex items-center"
+                  disabled={isExporting}
+                  className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold shadow-lg disabled:opacity-50 text-sm whitespace-nowrap"
                 >
-                  {isExporting ? <span className="animate-pulse">{exportProgress || 'Exportando...'}</span> : 'Exportar LIVE'}
+                  {isExporting ? (exportProgress || 'Exportando...') : 'Exportar FOH/CUE'}
+                </button>
+                <button 
+                  onClick={handleSaveMixConfig}
+                  className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded font-bold shadow-lg text-sm whitespace-nowrap ml-2"
+                >
+                  Guardar Configuración
                 </button>
              </div>
           </div>
