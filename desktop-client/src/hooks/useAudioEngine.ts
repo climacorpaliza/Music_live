@@ -564,7 +564,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     });
   }, [stems, isPlaying]);
 
-  const exportLiveMix = async (songId: string, onProgress: (msg: string) => void) => {
+  const exportLiveMix = async (songId: string, bandId: string, onProgress: (msg: string) => void) => {
     if (!audioContext.current) throw new Error("AudioContext not initialized");
     const sampleRate = audioContext.current.sampleRate;
     const lengthSeconds = totalDuration + preRollDurationRef.current + 5; // 5 seconds tail

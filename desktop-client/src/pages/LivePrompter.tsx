@@ -398,7 +398,7 @@ export default function LivePrompter() {
     if (confirm('¿Estás seguro de que deseas exportar la mezcla con la configuración de volumen y paneo actual? (Esto tomará unos segundos)')) {
       setIsExporting(true);
       try {
-        await exportLiveMix(selectedSongId, setExportProgress);
+        await exportLiveMix(selectedSongId, FAKE_BAND_ID, setExportProgress);
         alert('¡Exportación dual completada exitosamente!');
       } catch (err: any) {
         alert(err.message);
