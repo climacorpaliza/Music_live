@@ -85,10 +85,10 @@ export default function LivePrompter() {
             name: stem.name,
             type: type,
             url: stem.file_url,
-            volume: stem.metadata?.volume !== undefined ? stem.metadata.volume : 0.8,
-            pan: stem.metadata?.pan !== undefined ? stem.metadata.pan : 0,
-            muted: stem.metadata?.muted !== undefined ? stem.metadata.muted : false,
-            solo: stem.metadata?.solo !== undefined ? stem.metadata.solo : false,
+            volume: stem.metadata?.volume !== undefined ? Number(stem.metadata.volume) : 0.8,
+            pan: stem.metadata?.pan !== undefined ? Number(stem.metadata.pan) : 0,
+            muted: stem.metadata?.muted !== undefined ? Boolean(stem.metadata.muted) : false,
+            solo: stem.metadata?.solo !== undefined ? Boolean(stem.metadata.solo) : false,
             targetOutputChannel: 0
           };
         });
@@ -146,7 +146,7 @@ export default function LivePrompter() {
   const handleSaveMixConfig = async () => {
     if (!selectedSongId) return;
     try {
-      const updates = stems.filter(s => s.id !== 'synthetic-click' && s.id !== 'synthetic-cues').map(s => {
+      const updates = stems.filter(s => s.id !== 'synthetic-click' && s.id !== 'synthetic-cues').map(async (s) => {
         // Encontrar el stem original en dbStems para no sobreescribir metadata importante
         const originalStem = dbStems.find((dbS: any) => dbS.id === s.id);
         const newMetadata = {
@@ -156,10 +156,16 @@ export default function LivePrompter() {
           muted: s.muted,
           solo: s.solo
         };
-        return supabase.from('stems').update({ metadata: newMetadata }).eq('id', s.id);
+        const { error } = await supabase.from('stems').update({ metadata: newMetadata }).eq('id', s.id);
+        if (error) throw error;
       });
 
       await Promise.all(updates);
+      
+      // Recargar stems de la base de datos para asegurar sincronización en memoria
+      const { data } = await supabase.from('stems').select('*').eq('song_id', selectedSongId);
+      if (data) setDbStems(data.filter((stem: any) => !stem.metadata?.is_master));
+
       alert('¡Configuración de mezcla guardada exitosamente!');
     } catch (err: any) {
       alert(`Error al guardar configuración: ${err.message}`);
