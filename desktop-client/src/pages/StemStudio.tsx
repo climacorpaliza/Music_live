@@ -18,6 +18,10 @@ export default function StemStudio() {
   const [aiSuccessMessage, setAiSuccessMessage] = useState<string | null>(null);
   const [manualKey, setManualKey] = useState<string>('');
   const [timeSignature, setTimeSignature] = useState<string>('4/4');
+
+  // AI Splitter State
+  const [isSplitting, setIsSplitting] = useState(false);
+  const [splitMessage, setSplitMessage] = useState<string | null>(null);
   
   useEffect(() => {
     fetchSongs();
@@ -223,6 +227,118 @@ export default function StemStudio() {
     }
   };
 
+  const handleSplitMP3 = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!selectedSongId) return alert("Selecciona o crea una canción primero.");
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsSplitting(true);
+    setSplitMessage("Subiendo archivo original...");
+    
+    try {
+      // 1. Upload to Supabase Storage temporarily
+      const storagePath = `temp/${Date.now()}_${file.name}`;
+      const { error: uploadError } = await supabase.storage.from('audios').upload(storagePath, file);
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage.from('audios').getPublicUrl(storagePath);
+      const audioUrl = publicUrlData.publicUrl;
+
+      setSplitMessage("Iniciando IA en la nube...");
+
+      // 2. Start Replicate Job
+      const res = await fetch('/api/ai/split', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audioUrl })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al iniciar IA');
+
+      const { predictionId } = data;
+      setSplitMessage("Separando pistas (Esto puede tomar 1-3 minutos)...");
+
+      // 3. Poll for results
+      let pollCount = 1;
+      const poll = async () => {
+        try {
+          const statusRes = await fetch('/api/ai/split-status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ predictionId })
+          });
+          const statusData = await statusRes.json();
+          if (!statusRes.ok) throw new Error(statusData.error || 'Error en polling');
+
+          if (statusData.done) {
+            setSplitMessage("¡Separación completada! Descargando stems y procesando...");
+            
+            // Output format of cwalo/all-in-one-music-structure-analysis is a JSON string/object or array of URLs.
+            // Usually, if it's an array, output[1] is bass, etc.
+            // Let's assume output is an array of URLs.
+            const outputUrls = Array.isArray(statusData.output) ? statusData.output : [statusData.output];
+            
+            for (let i = 0; i < outputUrls.length; i++) {
+              const url = outputUrls[i];
+              if (typeof url !== 'string' || !url.startsWith('http')) continue;
+              
+              let stemName = `Stem ${i}`;
+              if (url.includes('bass')) stemName = 'Bass';
+              else if (url.includes('drums')) stemName = 'Drums';
+              else if (url.includes('other')) stemName = 'Other';
+              else if (url.includes('vocals')) stemName = 'Vocals';
+              else if (url.endsWith('.json')) continue; // Skip metadata file for stems
+              
+              // Download from Replicate URL
+              const res = await fetch(url);
+              const blob = await res.blob();
+              
+              // Upload to Supabase
+              const finalPath = `${FAKE_BAND_ID}/${selectedSongId}/${Date.now()}_${stemName}.wav`;
+              await supabase.storage.from('audios').upload(finalPath, blob, { contentType: 'audio/wav' });
+              const { data: finalUrl } = supabase.storage.from('audios').getPublicUrl(finalPath);
+              
+              // Save to database
+              await supabase.from('stems').insert({
+                song_id: selectedSongId,
+                name: stemName,
+                file_url: finalUrl.publicUrl,
+                type: 'Audio',
+                metadata: { original_name: `${stemName}.wav`, format: 'audio/wav', is_master: false }
+              });
+            }
+
+            setSplitMessage("¡Todo listo!");
+            setTimeout(() => setSplitMessage(null), 5000);
+            setIsSplitting(false);
+            fetchStems(selectedSongId);
+
+            // Borramos el MP3 temporal
+            await supabase.storage.from('audios').remove([storagePath]);
+          } else {
+            setSplitMessage(`Separando pistas (Intento ${pollCount})... Puede tardar un par de minutos.`);
+            pollCount++;
+            setTimeout(poll, 5000);
+          }
+        } catch (pollErr: any) {
+          console.error(pollErr);
+          setSplitMessage(null);
+          setIsSplitting(false);
+          alert(`Falló el proceso: ${pollErr.message}`);
+        }
+      };
+      
+      setTimeout(poll, 5000);
+    } catch (e: any) {
+      console.error(e);
+      setIsSplitting(false);
+      setSplitMessage(null);
+      alert('Error en el proceso de Split: ' + e.message);
+    }
+    
+    if (e.target) e.target.value = '';
+  };
+
   return (
     <div className="h-full flex flex-col p-8 bg-gradient-to-br from-[#0a0a0a] to-[#121212] overflow-y-auto">
       <div className="mb-8 flex items-center justify-between">
@@ -295,6 +411,38 @@ export default function StemStudio() {
               bandId={FAKE_BAND_ID}
               onUploadComplete={handleUploadComplete}
             />
+
+            {selectedSongId && (
+              <div className="mt-4 p-4 border border-blue-500/30 bg-blue-900/10 rounded-xl relative overflow-hidden group">
+                <input 
+                  type="file" 
+                  accept="audio/mpeg, audio/wav, audio/mp3" 
+                  onChange={handleSplitMP3}
+                  disabled={isSplitting}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
+                />
+                <div className="flex items-center justify-between pointer-events-none relative z-0">
+                  <div className="flex items-center gap-3">
+                    <Sparkles className="text-blue-400" size={24} />
+                    <div>
+                      <h4 className="font-bold text-blue-100">Separar Pistas con IA</h4>
+                      <p className="text-xs text-blue-300/70">
+                        {isSplitting 
+                          ? splitMessage 
+                          : "Haz clic aquí para subir un MP3. La IA extraerá Batería, Bajo, Voces y Otros mágicamente."}
+                      </p>
+                    </div>
+                  </div>
+                  {isSplitting ? (
+                    <RefreshCw className="text-blue-400 animate-spin" size={20} />
+                  ) : (
+                    <div className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded shadow-lg pointer-events-auto">
+                      Subir MP3
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* AI Intelligence Section */}

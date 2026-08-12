@@ -8,7 +8,7 @@ const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLI
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Configurar Replicate con token de entorno o fallback
-const replicateToken = process.env.REPLICATE_API_TOKEN;
+const replicateToken = process.env.REPLICATE_API_TOKENstems || process.env.VITE_REPLICATE_API_TOKENstems || process.env.REPLICATE_API_TOKEN || process.env.VITE_REPLICATE_API_TOKEN;
 const replicate = new Replicate({
   auth: replicateToken,
 });
