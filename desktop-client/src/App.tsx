@@ -5,6 +5,8 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import LivePrompter from './pages/LivePrompter';
 import StemStudio from './pages/StemStudio';
+import SetlistBuilder from './pages/SetlistBuilder';
+import LiveConcert from './pages/LiveConcert';
 import './App.css';
 
 // Protected Route Wrapper
@@ -39,8 +41,10 @@ function AppRoutes() {
           <Layout />
         </ProtectedRoute>
       }>
-        <Route path="/" element={<LivePrompter />} />
+        <Route path="/" element={<LiveConcert />} />
+        <Route path="/editor" element={<LivePrompter />} />
         <Route path="/studio" element={<StemStudio />} />
+        <Route path="/setlists" element={<SetlistBuilder />} />
       </Route>
       
       <Route path="*" element={<Navigate to="/" replace />} />

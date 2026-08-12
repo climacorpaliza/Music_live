@@ -1,6 +1,6 @@
 import { Outlet, NavLink } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { MonitorPlay, CloudUpload, LogOut, User, Music } from 'lucide-react';
+import { MonitorPlay, CloudUpload, LogOut, User, Music, ListMusic } from 'lucide-react';
 
 export default function Layout() {
   const { user, signOut } = useAuth();
@@ -24,13 +24,27 @@ export default function Layout() {
             className={({ isActive }) => 
               `flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-300 ${
                 isActive 
-                  ? 'bg-blue-600/20 text-blue-400 shadow-inner border border-blue-500/20' 
+                  ? 'bg-red-600/20 text-red-400 shadow-inner border border-red-500/20' 
                   : 'text-gray-400 hover:bg-white/5 hover:text-white'
               }`
             }
           >
             <MonitorPlay size={20} />
-            <span className="font-medium">Live Prompter</span>
+            <span className="font-medium">Live Concert</span>
+          </NavLink>
+
+          <NavLink 
+            to="/editor" 
+            className={({ isActive }) => 
+              `flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-300 ${
+                isActive 
+                  ? 'bg-blue-600/20 text-blue-400 shadow-inner border border-blue-500/20' 
+                  : 'text-gray-400 hover:bg-white/5 hover:text-white'
+              }`
+            }
+          >
+            <Music size={20} />
+            <span className="font-medium">Studio Prompter</span>
           </NavLink>
 
           <NavLink 
@@ -45,6 +59,20 @@ export default function Layout() {
           >
             <CloudUpload size={20} />
             <span className="font-medium">Stem Studio</span>
+          </NavLink>
+
+          <NavLink 
+            to="/setlists" 
+            className={({ isActive }) => 
+              `flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-300 ${
+                isActive 
+                  ? 'bg-yellow-500/20 text-yellow-500 shadow-inner border border-yellow-500/20' 
+                  : 'text-gray-400 hover:bg-white/5 hover:text-white'
+              }`
+            }
+          >
+            <ListMusic size={20} />
+            <span className="font-medium">Setlists</span>
           </NavLink>
         </div>
 

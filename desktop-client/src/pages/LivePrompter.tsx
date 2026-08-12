@@ -423,7 +423,7 @@ export default function LivePrompter() {
             value={selectedSongId || ''}
             onChange={(e) => setSelectedSongId(e.target.value)}
           >
-            <option value="">Selecciona un Setlist...</option>
+            <option value="">Selecciona una Canción...</option>
             {songs.map(song => (
               <option key={song.id} value={song.id}>{song.title}</option>
             ))}
