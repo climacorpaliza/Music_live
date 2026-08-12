@@ -223,7 +223,6 @@ export default function LiveConcert() {
     cueSourceRef.current.buffer = cueBufferRef.current;
     cueSourceRef.current.connect(cueGainRef.current!);
 
-    const now = audioCtxRef.current.currentTime;
     const offset = pauseTimeRef.current;
     
     const delayMs = 300; // Network propagation buffer

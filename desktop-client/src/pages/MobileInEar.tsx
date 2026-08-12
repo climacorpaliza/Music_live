@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useSyncSlave } from '../hooks/useSyncSlave';
 import { Volume2, Power, Music, Activity } from 'lucide-react';
 import { Prompter } from '../components/Prompter';
@@ -6,7 +6,7 @@ import { Prompter } from '../components/Prompter';
 const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 
 export default function MobileInEar() {
-  const { currentSongId, songData, isPlaying, playTrigger, pauseTrigger, seekTrigger } = useSyncSlave(FAKE_BAND_ID);
+  const { songData, isPlaying, playTrigger, pauseTrigger, seekTrigger } = useSyncSlave(FAKE_BAND_ID);
   
   const [hasInteracted, setHasInteracted] = useState(false);
   const [audioCtx, setAudioCtx] = useState<AudioContext | null>(null);
