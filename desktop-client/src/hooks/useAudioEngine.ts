@@ -757,7 +757,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       await import('../lib/supabase').then(m => m.supabase.from('songs').update({
         foh_mix_url: fohUrl,
         cue_mix_url: cueUrl
-      }).eq('id', songId);
+      }).eq('id', songId));
 
       onProgress('¡Exportación completada exitosamente!');
     } catch (err: any) {
