@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { Prompter } from '../components/Prompter';
-import { Play, Pause, Square, SkipBack, SkipForward, MonitorSpeaker, Music, LayoutList } from 'lucide-react';
+import { Play, Pause, Square, SkipBack, SkipForward, MonitorSpeaker, Music, LayoutList, Wifi, Users } from 'lucide-react';
+import { useSyncMaster } from '../hooks/useSyncMaster';
 
 const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -17,6 +18,10 @@ export default function LiveConcert() {
   const [currentTime, setCurrentTime] = useState(0);
   const [totalDuration, setTotalDuration] = useState(0);
   const [routingMode, setRoutingMode] = useState<'StereoSplit' | 'MultiChannel'>('StereoSplit');
+
+  // Network Sync
+  const { broadcast, connections } = useSyncMaster(FAKE_BAND_ID);
+  const [broadcastEnabled, setBroadcastEnabled] = useState(false);
 
   // Audio Context & Nodes
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -72,7 +77,7 @@ export default function LiveConcert() {
     if (currentSong) {
       loadSongAudio(currentSong);
     }
-  }, [currentSongIndex, currentSong]);
+  }, [currentSongIndex, currentSong, broadcastEnabled]);
 
   const fetchSetlists = async () => {
     const { data } = await supabase.from('setlists').select('*').eq('band_id', FAKE_BAND_ID).order('created_at', { ascending: false });
@@ -136,6 +141,10 @@ export default function LiveConcert() {
       
       setTotalDuration(fohBufferRef.current.duration);
       setLoadStatus('');
+      
+      if (broadcastEnabled) {
+        broadcast({ type: 'LOAD_SONG', songId: song.id, songData: song });
+      }
       
     } catch (e: any) {
       console.error(e);
@@ -215,14 +224,21 @@ export default function LiveConcert() {
     cueSourceRef.current.connect(cueGainRef.current!);
 
     const now = audioCtxRef.current.currentTime;
-    
-    // Resume logic
     const offset = pauseTimeRef.current;
     
-    fohSourceRef.current.start(0, offset);
-    cueSourceRef.current.start(0, offset);
+    const delayMs = 300; // Network propagation buffer
+    const T_start = Date.now() + delayMs;
+    
+    if (broadcastEnabled) {
+       broadcast({ type: 'PLAY', startAt: T_start, offset: offset });
+    }
 
-    startTimeRef.current = now - offset;
+    const startAudioContextTime = audioCtxRef.current.currentTime + (delayMs / 1000);
+    
+    fohSourceRef.current.start(startAudioContextTime, offset);
+    cueSourceRef.current.start(startAudioContextTime, offset);
+
+    startTimeRef.current = startAudioContextTime - offset;
     setIsPlaying(true);
     isPlayingRef.current = true;
     updateTime();
@@ -242,6 +258,10 @@ export default function LiveConcert() {
     setIsPlaying(false);
     isPlayingRef.current = false;
     cancelAnimationFrame(animationFrameRef.current);
+    
+    if (broadcastEnabled) {
+       broadcast({ type: 'PAUSE' });
+    }
   };
 
   const updateTime = () => {
@@ -274,6 +294,10 @@ export default function LiveConcert() {
     
     pauseTimeRef.current = globalTime;
     setCurrentTime(newVisualTime);
+    
+    if (broadcastEnabled) {
+       broadcast({ type: 'SEEK', offset: globalTime });
+    }
     
     if (wasPlaying) {
       setTimeout(() => play(), 50);
@@ -358,6 +382,26 @@ export default function LiveConcert() {
         </div>
 
         <div className="flex items-center space-x-6">
+          {/* Network Broadcast Toggle */}
+          <div className={`flex items-center space-x-3 p-2 rounded-lg border transition ${
+            broadcastEnabled ? 'bg-blue-600/20 border-blue-500/50' : 'bg-[#1A1A1A] border-[#333]'
+          }`}>
+            <Wifi size={20} className={broadcastEnabled ? 'text-blue-400' : 'text-gray-400'} />
+            <div className="flex flex-col cursor-pointer" onClick={() => setBroadcastEnabled(!broadcastEnabled)}>
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${broadcastEnabled ? 'text-blue-400' : 'text-gray-500'}`}>
+                In-Ears Móviles
+              </span>
+              <span className="text-sm font-semibold text-white">
+                {broadcastEnabled ? 'Transmitiendo' : 'Desactivado'}
+              </span>
+            </div>
+            {broadcastEnabled && (
+              <div className="flex items-center ml-2 text-xs font-bold bg-blue-500/30 text-blue-300 px-2 py-1 rounded-full" title="Músicos conectados">
+                <Users size={12} className="mr-1" /> {connections}
+              </div>
+            )}
+          </div>
+
            {/* Routing Mode */}
           <div className="flex items-center space-x-3 bg-[#1A1A1A] p-2 rounded-lg border border-[#333]">
             <MonitorSpeaker size={20} className="text-gray-400" />

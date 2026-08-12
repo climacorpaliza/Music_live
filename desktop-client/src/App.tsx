@@ -7,6 +7,7 @@ import LivePrompter from './pages/LivePrompter';
 import StemStudio from './pages/StemStudio';
 import SetlistBuilder from './pages/SetlistBuilder';
 import LiveConcert from './pages/LiveConcert';
+import MobileInEar from './pages/MobileInEar';
 import './App.css';
 
 // Protected Route Wrapper
@@ -46,6 +47,13 @@ function AppRoutes() {
         <Route path="/studio" element={<StemStudio />} />
         <Route path="/setlists" element={<SetlistBuilder />} />
       </Route>
+      
+      {/* Standalone Mobile Route */}
+      <Route path="/mobile" element={
+        <ProtectedRoute>
+          <MobileInEar />
+        </ProtectedRoute>
+      } />
       
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
