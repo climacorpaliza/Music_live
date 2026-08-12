@@ -10,7 +10,7 @@ const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 export default function LivePrompter() {
   const [songs, setSongs] = useState<any[]>([]);
   const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
-  const { loadStems, play, pause, seekTo, isPlaying, currentTime, routingMode, setRoutingMode, stems, setStems, loadProgress, totalDuration, preRollDuration } = useAudioEngine([]);
+  const { loadStems, play, pause, seekTo, isPlaying, currentTime, routingMode, setRoutingMode, stems, setStems, loadProgress, totalDuration, preRollDuration, exportLiveMix } = useAudioEngine([]);
   
   const [prompterData, setPrompterData] = useState<{bpm?: number, timeSignature?: string, firstBeatOffset?: number, beatTimes?: number[], chords: any[], sections: any[]}>({ chords: [], sections: [] });
   
@@ -21,6 +21,9 @@ export default function LivePrompter() {
   const [isEditingSections, setIsEditingSections] = useState(false);
   const [isEditingPrompter, setIsEditingPrompter] = useState(false);
   const [prompterText, setPrompterText] = useState('');
+  
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState('');
   
   // Stems as returned from Supabase
   const [dbStems, setDbStems] = useState<any[]>([]);
@@ -83,6 +86,7 @@ export default function LivePrompter() {
             type: type,
             url: stem.file_url,
             volume: 0.8,
+            pan: 0,
             muted: false,
             solo: false,
             targetOutputChannel: 0
@@ -96,6 +100,7 @@ export default function LivePrompter() {
           type: 'Click',
           url: '', // Se genera matemáticamente en RAM
           volume: 0.8,
+          pan: 0,
           muted: false,
           solo: false,
           targetOutputChannel: 0
@@ -108,6 +113,7 @@ export default function LivePrompter() {
           type: 'Cues',
           url: '', // Se genera matemáticamente en RAM
           volume: 0.8,
+          pan: 0,
           muted: false,
           solo: false,
           targetOutputChannel: 0
@@ -217,6 +223,10 @@ export default function LivePrompter() {
 
   const handleVolumeChange = (stemId: string, newVolume: number) => {
     setStems((prev: any[]) => prev.map((s: any) => s.id === stemId ? { ...s, volume: newVolume } : s));
+  };
+
+  const handlePanChange = (stemId: string, newPan: number) => {
+    setStems((prev: any[]) => prev.map((s: any) => s.id === stemId ? { ...s, pan: newPan } : s));
   };
 
   const toggleMute = (stemId: string) => {
@@ -380,6 +390,22 @@ export default function LivePrompter() {
     } catch (e: any) {
       console.error(e);
       alert('Error guardando: ' + e.message);
+    }
+  };
+
+  const handleExportLiveMix = async () => {
+    if (!selectedSongId) return;
+    if (confirm('¿Estás seguro de que deseas exportar la mezcla con la configuración de volumen y paneo actual? (Esto tomará unos segundos)')) {
+      setIsExporting(true);
+      try {
+        await exportLiveMix(selectedSongId, setExportProgress);
+        alert('¡Exportación dual completada exitosamente!');
+      } catch (err: any) {
+        alert(err.message);
+      } finally {
+        setIsExporting(false);
+        setExportProgress('');
+      }
     }
   };
 
@@ -576,20 +602,40 @@ export default function LivePrompter() {
                   <button onClick={() => toggleSolo(stem.id)} className={`w-7 h-7 flex items-center justify-center rounded text-[11px] font-black transition ${stem.solo ? 'bg-yellow-500 text-black shadow-[0_0_10px_rgba(234,179,8,0.5)]' : 'bg-[#222] text-gray-500 hover:bg-[#333]'}`}>S</button>
                 </div>
 
-                <div className="flex-1 flex items-center relative group">
-                  <input 
-                    type="range" 
-                    min="0" max="1" step="0.01" 
-                    value={stem.volume}
-                    onChange={(e) => handleVolumeChange(stem.id, parseFloat(e.target.value))}
-                    className="w-full appearance-none bg-transparent cursor-pointer h-1.5 rounded-full"
-                    style={{
-                      boxShadow: 'inset 0 0 5px rgba(0,0,0,1)',
-                      background: `linear-gradient(90deg, #3b82f6 ${stem.volume * 100}%, #111 ${stem.volume * 100}%)`
-                    }}
-                  />
-                  <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition text-[10px] bg-black text-white px-2 py-1 rounded pointer-events-none">
-                    {Math.round(stem.volume * 100)}%
+                <div className="flex-1 flex flex-col justify-center px-4 space-y-2">
+                  <div className="flex items-center relative group">
+                    <span className="text-[9px] text-gray-500 mr-2 w-4">VOL</span>
+                    <input 
+                      type="range" 
+                      min="0" max="1" step="0.01" 
+                      value={stem.volume}
+                      onChange={(e) => handleVolumeChange(stem.id, parseFloat(e.target.value))}
+                      className="w-full appearance-none bg-transparent cursor-pointer h-1.5 rounded-full"
+                      style={{
+                        boxShadow: 'inset 0 0 5px rgba(0,0,0,1)',
+                        background: `linear-gradient(90deg, #3b82f6 ${stem.volume * 100}%, #111 ${stem.volume * 100}%)`
+                      }}
+                    />
+                    <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition text-[10px] bg-black text-white px-2 py-1 rounded pointer-events-none">
+                      {Math.round(stem.volume * 100)}%
+                    </div>
+                  </div>
+                  <div className="flex items-center relative group">
+                    <span className="text-[9px] text-gray-500 mr-2 w-4">PAN</span>
+                    <input 
+                      type="range" 
+                      min="-1" max="1" step="0.01" 
+                      value={stem.pan}
+                      onChange={(e) => handlePanChange(stem.id, parseFloat(e.target.value))}
+                      className="w-full appearance-none bg-transparent cursor-pointer h-1.5 rounded-full"
+                      style={{
+                        boxShadow: 'inset 0 0 5px rgba(0,0,0,1)',
+                        background: `linear-gradient(90deg, #111 ${((stem.pan + 1) / 2) * 100}%, #a855f7 ${((stem.pan + 1) / 2) * 100}%)`
+                      }}
+                    />
+                    <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition text-[10px] bg-black text-white px-2 py-1 rounded pointer-events-none z-10">
+                      {stem.pan < 0 ? 'L' : stem.pan > 0 ? 'R' : 'C'} {Math.round(Math.abs(stem.pan) * 100)}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -638,6 +684,14 @@ export default function LivePrompter() {
                     </button>
                   </>
                 )}
+                
+                <button 
+                  onClick={handleExportLiveMix}
+                  disabled={!audioLoaded || isExporting}
+                  className="ml-4 bg-purple-600 hover:bg-purple-500 text-white px-3 py-1 rounded text-xs font-bold transition disabled:opacity-50 flex items-center"
+                >
+                  {isExporting ? <span className="animate-pulse">{exportProgress || 'Exportando...'}</span> : 'Exportar LIVE'}
+                </button>
              </div>
           </div>
           

@@ -9,6 +9,7 @@ export interface StemTrack {
   type: StemType;
   url: string;
   volume: number; // 0.0 to 1.0
+  pan: number; // -1.0 (L) to 1.0 (R)
   muted: boolean;
   solo: boolean;
   targetOutputChannel?: number; // Used in MultiChannel mode
@@ -277,7 +278,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
          gain.gain.value = isMuted ? 0 : stem.volume;
          if (routingMode === 'StereoSplit') {
            const panner = ctx.createStereoPanner();
-           panner.pan.value = 0;
+           panner.pan.value = stem.pan || 0;
            gain.connect(panner);
            panner.connect(ctx.destination);
            pannerNodes.current.set(stem.id, panner);
@@ -304,8 +305,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       
       if (routingMode === 'StereoSplit') {
         const panner = ctx.createStereoPanner();
-        // Centro (0) para garantizar que suene en ambos canales (evita silencio si falta un altavoz)
-        panner.pan.value = (stem.type === 'Click' || stem.type === 'Cues') ? 0 : 1;
+        panner.pan.value = stem.pan || 0;
         gain.connect(panner);
         panner.connect(ctx.destination);
         pannerNodes.current.set(stem.id, panner);
@@ -557,8 +557,260 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
           gainNode.gain.setTargetAtTime(isMuted ? 0 : stem.volume, audioContext.current.currentTime, 0.01);
         }
       }
+      const pannerNode = pannerNodes.current.get(stem.id);
+      if (pannerNode && audioContext.current) {
+         pannerNode.pan.setTargetAtTime(stem.pan || 0, audioContext.current.currentTime, 0.01);
+      }
     });
   }, [stems, isPlaying]);
+
+  const exportLiveMix = async (songId: string, onProgress: (msg: string) => void) => {
+    if (!audioContext.current) throw new Error("AudioContext not initialized");
+    const sampleRate = audioContext.current.sampleRate;
+    const lengthSeconds = totalDuration + preRollDurationRef.current + 5; // 5 seconds tail
+    const lengthSamples = Math.ceil(lengthSeconds * sampleRate);
+
+    const renderMix = async (isFoh: boolean): Promise<Blob> => {
+      onProgress(`Preparando renderizado ${isFoh ? 'FOH' : 'CUE'}...`);
+      const offlineCtx = new (window.OfflineAudioContext || (window as any).webkitOfflineAudioContext)(2, lengthSamples, sampleRate);
+      
+      const prompterData = prompterDataRef.current;
+      const manualGridOffset = manualGridOffsetRef.current;
+      const preRollDuration = preRollDurationRef.current;
+
+      // Render Stems
+      stems.forEach(stem => {
+        // FOH: Only Music. CUE: Only Click & Cues (and maybe Music if they didn't mute it? No, user wants CUE to be click+cue, FOH to be music).
+        // Actually, the user asked for FOH = Stereo Music, CUE = Stereo Click+Cue.
+        // Let's filter:
+        const isMusic = stem.type === 'Instrument';
+        if (isFoh && !isMusic) return; // FOH only gets instruments
+        if (!isFoh && isMusic) return; // CUE only gets click and cues
+
+        const isMuted = stem.muted;
+        if (isMuted) return;
+
+        if (stem.id === 'synthetic-click' || stem.id === 'synthetic-cues') {
+           // handled below
+           return;
+        }
+
+        const buffer = buffers.current.get(stem.id);
+        if (!buffer) return;
+
+        const source = offlineCtx.createBufferSource();
+        source.buffer = buffer;
+        
+        const gain = offlineCtx.createGain();
+        gain.gain.value = stem.volume;
+
+        const panner = offlineCtx.createStereoPanner();
+        panner.pan.value = stem.pan || 0;
+
+        source.connect(gain);
+        gain.connect(panner);
+        panner.connect(offlineCtx.destination);
+        
+        source.start(preRollDuration);
+      });
+
+      // Render Clicks (Only for CUE)
+      if (!isFoh && prompterData && prompterData.bpm) {
+        const clickStem = stems.find(s => s.id === 'synthetic-click');
+        if (!clickStem || !clickStem.muted) {
+           const beatInterval = 60 / prompterData.bpm;
+           const beatsPerMeasure = parseInt(prompterData.timeSignature?.split('/')[0]) || 4;
+           let shiftedBeatTimes: number[] = [];
+           if (prompterData.beatTimes && prompterData.beatTimes.length > 0) {
+              const firstSongBeatTime = prompterData.beatTimes[0] + preRollDuration;
+              for (let i = beatsPerMeasure; i > 0; i--) shiftedBeatTimes.push(firstSongBeatTime - (i * beatInterval));
+              shiftedBeatTimes = [...shiftedBeatTimes, ...prompterData.beatTimes.map((t: number) => t + preRollDuration)];
+           } else {
+              const startOffset = (prompterData.firstBeatOffset || 0) + manualGridOffset;
+              for (let t = preRollDuration - (beatsPerMeasure * beatInterval); t <= lengthSeconds; t += beatInterval) {
+                  const adjusted = t + startOffset;
+                  if (adjusted >= 0) shiftedBeatTimes.push(adjusted);
+              }
+           }
+
+           const gridOffsetTime = (prompterData.firstBeatOffset || 0) + manualGridOffset;
+           const manualOffset = (prompterData.beatTimes && prompterData.beatTimes.length > 0) ? (gridOffsetTime - prompterData.beatTimes[0]) : 0;
+           
+           let beatCount = 0;
+           for (const time of shiftedBeatTimes) {
+             const adjustedTime = time + manualOffset;
+             if (adjustedTime >= 0 && adjustedTime < lengthSeconds) {
+               const isHigh = beatCount % beatsPerMeasure === 0;
+               const buffer = isHigh ? clickHighBufferRef.current : clickLowBufferRef.current;
+               
+               if (buffer) {
+                 const source = offlineCtx.createBufferSource();
+                 source.buffer = buffer;
+                 const gain = offlineCtx.createGain();
+                 gain.gain.value = clickStem ? clickStem.volume : 0.8;
+                 const panner = offlineCtx.createStereoPanner();
+                 panner.pan.value = clickStem ? (clickStem.pan || 0) : 0;
+                 
+                 source.connect(gain);
+                 gain.connect(panner);
+                 panner.connect(offlineCtx.destination);
+                 source.start(adjustedTime);
+               }
+             }
+             beatCount++;
+           }
+        }
+      }
+
+      // Render Cues (Only for CUE)
+      if (!isFoh && prompterData && prompterData.sections && prompterData.bpm) {
+        const cueStem = stems.find(s => s.id === 'synthetic-cues');
+        if (!cueStem || !cueStem.muted) {
+           const beatInterval = 60 / prompterData.bpm;
+           const beatsPerMeasure = parseInt(prompterData.timeSignature?.split('/')[0]) || 4;
+           let bTimes: number[] = [];
+           if (prompterData.beatTimes && prompterData.beatTimes.length > 0) {
+              const firstSongBeatTime = prompterData.beatTimes[0] + preRollDuration;
+              for (let i = beatsPerMeasure; i > 0; i--) bTimes.push(firstSongBeatTime - (i * beatInterval));
+              bTimes = [...bTimes, ...prompterData.beatTimes.map((t: number) => t + preRollDuration)];
+           } else {
+              const startOffset = (prompterData.firstBeatOffset || 0) + manualGridOffset;
+              for (let t = preRollDuration - (beatsPerMeasure * beatInterval); t <= lengthSeconds; t += beatInterval) {
+                  const adjusted = t + startOffset;
+                  if (adjusted >= 0) bTimes.push(adjusted);
+              }
+           }
+           const gridOffsetTime = (prompterData.firstBeatOffset || 0) + manualGridOffset;
+           const manualOffset = (prompterData.beatTimes && prompterData.beatTimes.length > 0) ? (gridOffsetTime - prompterData.beatTimes[0]) : 0;
+
+           prompterData.sections.forEach((section: any) => {
+              const secTime = section.time + preRollDuration;
+              let nearestBeatIdx = 0;
+              let minDiff = Infinity;
+              for (let i = 0; i < bTimes.length; i++) {
+                 const diff = Math.abs(bTimes[i] - secTime);
+                 if (diff < minDiff) { minDiff = diff; nearestBeatIdx = i; }
+              }
+              
+              const schedule = (bufName: string, bIdx: number) => {
+                 const buf = cueBuffersRef.current[bufName];
+                 const cueOffset = cueOffsetsRef.current[bufName] || 0;
+                 if (buf && bIdx >= 0 && bIdx < bTimes.length) {
+                    const absoluteTime = bTimes[bIdx] + manualOffset;
+                    if (absoluteTime >= 0 && absoluteTime < lengthSeconds) {
+                       const source = offlineCtx.createBufferSource();
+                       source.buffer = buf;
+                       const gain = offlineCtx.createGain();
+                       gain.gain.value = cueStem ? cueStem.volume : 0.8;
+                       const panner = offlineCtx.createStereoPanner();
+                       panner.pan.value = cueStem ? (cueStem.pan || 0) : 0;
+                       
+                       source.connect(gain);
+                       gain.connect(panner);
+                       panner.connect(offlineCtx.destination);
+                       source.start(absoluteTime, cueOffset);
+                    }
+                 }
+              };
+              
+              let sName = (section.name || section.section || '').toLowerCase();
+              if (!cueBuffersRef.current[sName]) sName = '';
+              
+              if (section.time < 0.5) {
+                 if (sName) schedule(sName, 0);
+                 schedule('3', 1); schedule('2', 2); schedule('1', 3);
+              } else if (minDiff < 1.0 && nearestBeatIdx >= 4) {
+                 if (sName) schedule(sName, nearestBeatIdx - 4);
+                 schedule('3', nearestBeatIdx - 3); schedule('2', nearestBeatIdx - 2); schedule('1', nearestBeatIdx - 1);
+              }
+           });
+        }
+      }
+
+      onProgress(`Renderizando ${isFoh ? 'FOH' : 'CUE'}...`);
+      const renderedBuffer = await offlineCtx.startRendering();
+      
+      onProgress(`Codificando WAV ${isFoh ? 'FOH' : 'CUE'}...`);
+      return audioBufferToWavBlob(renderedBuffer);
+    };
+
+    try {
+      const fohBlob = await renderMix(true);
+      const cueBlob = await renderMix(false);
+
+      onProgress('Subiendo FOH a la nube...');
+      const fohFile = new File([fohBlob], `${songId}_foh.wav`, { type: 'audio/wav' });
+      const { data: fohData, error: fohError } = await import('../lib/supabase').then(m => m.supabase.storage.from('stems').upload(`exports/${songId}_foh_${Date.now()}.wav`, fohFile));
+      if (fohError) throw fohError;
+      
+      onProgress('Subiendo CUE a la nube...');
+      const cueFile = new File([cueBlob], `${songId}_cue.wav`, { type: 'audio/wav' });
+      const { data: cueData, error: cueError } = await import('../lib/supabase').then(m => m.supabase.storage.from('stems').upload(`exports/${songId}_cue_${Date.now()}.wav`, cueFile));
+      if (cueError) throw cueError;
+
+      const { supabase } = await import('../lib/supabase');
+      const fohUrl = supabase.storage.from('stems').getPublicUrl(fohData.path).data.publicUrl;
+      const cueUrl = supabase.storage.from('stems').getPublicUrl(cueData.path).data.publicUrl;
+
+      onProgress('Guardando URLs en la base de datos...');
+      await supabase.from('songs').update({
+        foh_mix_url: fohUrl,
+        cue_mix_url: cueUrl
+      }).eq('id', songId);
+
+      onProgress('¡Exportación completada exitosamente!');
+    } catch (err: any) {
+      console.error(err);
+      throw new Error(`Error en la exportación: ${err.message}`);
+    }
+  };
+
+  // Helper para convertir AudioBuffer a WAV Blob
+  const audioBufferToWavBlob = (buffer: AudioBuffer): Blob => {
+    const numOfChan = buffer.numberOfChannels;
+    const length = buffer.length * numOfChan * 2 + 44;
+    const arrayBuffer = new ArrayBuffer(length);
+    const view = new DataView(arrayBuffer);
+    const channels = [];
+    let offset = 0;
+    let pos = 0;
+
+    // write WAV header
+    const setUint16 = (data: number) => { view.setUint16(pos, data, true); pos += 2; };
+    const setUint32 = (data: number) => { view.setUint32(pos, data, true); pos += 4; };
+    const setString = (data: string) => { for (let i = 0; i < data.length; i++) { view.setUint8(pos, data.charCodeAt(i)); pos++; } };
+
+    setString('RIFF');
+    setUint32(length - 8);
+    setString('WAVE');
+    setString('fmt ');
+    setUint32(16);
+    setUint16(1);
+    setUint16(numOfChan);
+    setUint32(buffer.sampleRate);
+    setUint32(buffer.sampleRate * 2 * numOfChan);
+    setUint16(numOfChan * 2);
+    setUint16(16);
+    setString('data');
+    setUint32(length - pos - 4);
+
+    // write interleaved data
+    for (let i = 0; i < buffer.numberOfChannels; i++) {
+      channels.push(buffer.getChannelData(i));
+    }
+
+    while (pos < length) {
+      for (let i = 0; i < numOfChan; i++) {
+        let sample = Math.max(-1, Math.min(1, channels[i][offset])); // clamp
+        sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0; // scale to 16-bit
+        view.setInt16(pos, sample, true);
+        pos += 2;
+      }
+      offset++;
+    }
+
+    return new Blob([arrayBuffer], { type: 'audio/wav' });
+  };
 
   return {
     loadStems,
@@ -574,6 +826,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     setLoop,
     loadProgress,
     totalDuration,
-    preRollDuration: preRollDurationRef.current
+    preRollDuration: preRollDurationRef.current,
+    exportLiveMix
   };
 };
