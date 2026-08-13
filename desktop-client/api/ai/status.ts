@@ -61,11 +61,65 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // SERVER-SIDE QUANTIZATION: Aplicar la propuesta del usuario
+    // Si ya tenemos el tempo (beatTimes), ajustamos los acordes a esa grilla exacta
+    let quantizedChords = finalChords;
+    
+    if (prompterData.beatTimes && prompterData.beatTimes.length > 0) {
+      const beatTimes = prompterData.beatTimes;
+      const eighthGrid = [];
+      for (let i = 0; i < beatTimes.length - 1; i++) {
+        eighthGrid.push(beatTimes[i]); // Downbeat
+        eighthGrid.push((beatTimes[i] + beatTimes[i + 1]) / 2); // Corchea (mid-beat)
+      }
+      eighthGrid.push(beatTimes[beatTimes.length - 1]);
+
+      const firstBeatTime = beatTimes[0];
+      
+      // 1. Descartar basura generada antes del inicio real de la canción
+      const validChords = finalChords.filter(c => c.time >= firstBeatTime - 0.2);
+      
+      const alignedChords = [];
+      let currentActiveChord = null;
+
+      for (const chord of validChords) {
+        // Encontrar la línea de la grilla más cercana
+        let closest = eighthGrid[0];
+        let minDiff = Math.abs(closest - chord.time);
+        
+        for (let i = 1; i < eighthGrid.length; i++) {
+          const diff = Math.abs(eighthGrid[i] - chord.time);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closest = eighthGrid[i];
+          }
+        }
+
+        // Obligamos a que el acorde encaje perfectamente en la corchea más cercana
+        const snappedTime = Number(closest.toFixed(3));
+
+        // Solo guardamos si es un cambio de acorde real en ese tiempo
+        if (alignedChords.length === 0 || alignedChords[alignedChords.length - 1].time !== snappedTime) {
+          if (currentActiveChord !== chord.chord) {
+             alignedChords.push({ time: snappedTime, chord: chord.chord });
+             currentActiveChord = chord.chord;
+          }
+        } else if (alignedChords[alignedChords.length - 1].time === snappedTime) {
+          // Si varios acordes caen en el mismo tick de la grilla, nos quedamos con el último detectado
+          alignedChords[alignedChords.length - 1].chord = chord.chord;
+          currentActiveChord = chord.chord;
+        }
+      }
+      
+      quantizedChords = alignedChords;
+      console.log(`[IA-Status] Cuantización exitosa: ${quantizedChords.length} acordes alineados a la grilla.`);
+    }
+
     let harmonicBpm = null;
-    if (finalChords.length > 5) {
+    if (quantizedChords.length > 5) {
       const diffs = [];
-      for (let i = 1; i < finalChords.length; i++) {
-        diffs.push(finalChords[i].time - finalChords[i - 1].time);
+      for (let i = 1; i < quantizedChords.length; i++) {
+        diffs.push(quantizedChords[i].time - quantizedChords[i - 1].time);
       }
       
       let bestBpm = 0;
@@ -104,7 +158,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const finalBpm = currentBpm !== 99 && currentBpm !== 120 ? currentBpm : (harmonicBpm || currentBpm);
     
     prompterData.bpm = Number(Number(finalBpm).toFixed(2));
-    prompterData.chords = finalChords;
+    prompterData.chords = quantizedChords;
 
     console.log('[IA-Status] PrompterData Final ensamblado. Guardando en Supabase...');
 
