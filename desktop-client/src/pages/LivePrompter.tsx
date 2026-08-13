@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAudioEngine, StemTrack } from '../hooks/useAudioEngine';
 import { Prompter } from '../components/Prompter';
 import { Play, Pause, Square, MonitorSpeaker, Mic, Edit3, Save, AlertCircle, Music, Headphones, Activity } from 'lucide-react';
+import { detectBeatsAdaptive } from '../utils/beatDetector';
 import '../App.css';
 
 const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
@@ -10,9 +11,11 @@ const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 export default function LivePrompter() {
   const [songs, setSongs] = useState<any[]>([]);
   const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
-  const { loadStems, play, pause, seekTo, isPlaying, currentTime, routingMode, setRoutingMode, stems, setStems, loadProgress, totalDuration, preRollDuration, exportLiveMix } = useAudioEngine([]);
+  const { loadStems, play, pause, seekTo, isPlaying, currentTime, routingMode, setRoutingMode, stems, setStems, loadProgress, totalDuration, preRollDuration, exportLiveMix, getBuffer } = useAudioEngine([]);
   
   const [prompterData, setPrompterData] = useState<{bpm?: number, timeSignature?: string, firstBeatOffset?: number, beatTimes?: number[], chords: any[], sections: any[]}>({ chords: [], sections: [] });
+  
+  const [isAnalyzingTempo, setIsAnalyzingTempo] = useState(false);
   
   // Ref del tiempo para el editor en vivo (evitar stale closures y re-binds)
   const currentTimeRef = useRef(0);
@@ -217,11 +220,9 @@ export default function LivePrompter() {
   const handleLiveTap = async () => {
     if (!audioLoaded) return;
     const now = Date.now();
-    setLiveTapTimes(prev => {
-      const recentTaps = prev.filter(time => now - time < 3000);
-      const newTaps = [...recentTaps, now];
-      
-      if (newTaps.length >= 4) { // Requiere 4 taps para estar seguro
+    const newTaps = [...liveTapTimes, now].filter(time => now - time < 3000);
+    
+    if (newTaps.length >= 4) { // Requiere 4 taps para estar seguro
         const intervals = [];
         for (let i = 1; i < newTaps.length; i++) {
           intervals.push(newTaps[i] - newTaps[i-1]);
@@ -230,13 +231,13 @@ export default function LivePrompter() {
         const newBpm = Math.round(60000 / avgInterval);
         
         // Actualizar el estado temporalmente en RAM
-        setPrompterData(prevData => ({ ...prevData, bpm: newBpm }));
+        setPrompterData(prevData => ({ ...prevData, bpm: newBpm, beatTimes: [] }));
         
         // Regenerar audio con nuevo BPM al instante
         const baseOffset = prompterData.firstBeatOffset !== undefined 
           ? prompterData.firstBeatOffset 
           : (prompterData.chords && prompterData.chords.length > 0 ? prompterData.chords[0].time : 0);
-        loadStems(newBpm, baseOffset + manualGridOffset, prompterData.timeSignature, prompterData.beatTimes, prompterData).then(() => {
+        loadStems(newBpm, baseOffset + manualGridOffset, prompterData.timeSignature, [], prompterData).then(() => {
           if (isPlaying) {
              const current = currentTime;
              pause();
@@ -244,10 +245,53 @@ export default function LivePrompter() {
           }
         });
         
-        return []; // Limpiar taps después de un sync exitoso
-      }
-      return newTaps;
-    });
+        setLiveTapTimes([]);
+    } else {
+        setLiveTapTimes(newTaps);
+    }
+  };
+
+  const handleAdaptiveTempo = async () => {
+    if (!prompterData.bpm) {
+      alert("Primero define un BPM aproximado manualmente o con Live Tap.");
+      return;
+    }
+    
+    let targetStem = stems.find(s => s.name.toLowerCase().includes('click') || s.name.toLowerCase().includes('metronomo'));
+    if (!targetStem) {
+      targetStem = stems.find(s => s.name.toLowerCase().includes('drum') || s.name.toLowerCase().includes('bateria'));
+    }
+    if (!targetStem) {
+      alert("No se encontró pista de Click o Batería para analizar.");
+      return;
+    }
+
+    const buffer = getBuffer(targetStem.id);
+    if (!buffer) {
+      alert("El audio aún no se ha cargado en memoria.");
+      return;
+    }
+
+    setIsAnalyzingTempo(true);
+    try {
+      const beatTimes = await detectBeatsAdaptive(buffer, prompterData.bpm);
+      
+      setPrompterData(prev => ({ ...prev, beatTimes }));
+      
+      const baseOffset = prompterData.firstBeatOffset !== undefined 
+        ? prompterData.firstBeatOffset 
+        : (prompterData.chords && prompterData.chords.length > 0 ? prompterData.chords[0].time : 0);
+      
+      await loadStems(prompterData.bpm, baseOffset + manualGridOffset, prompterData.timeSignature, beatTimes, { ...prompterData, beatTimes });
+      
+      alert(`Análisis completado. Se detectaron ${beatTimes.length} beats.`);
+      
+    } catch (e: any) {
+      console.error(e);
+      alert('Error en análisis adaptativo: ' + e.message);
+    } finally {
+      setIsAnalyzingTempo(false);
+    }
   };
 
   const handleVolumeChange = (stemId: string, newVolume: number) => {
@@ -475,21 +519,31 @@ export default function LivePrompter() {
           {/* Live Sync Engine */}
           <div className="flex items-center space-x-1 bg-[#1A1A1A] p-1.5 rounded border border-[#333] ml-2">
             <span className="text-[9px] text-red-500 font-bold uppercase tracking-wider mr-2 animate-pulse">Live Sync</span>
-            <button 
-              onClick={handleSetDownbeat} 
-              disabled={!isPlaying}
-              className="bg-red-900/30 hover:bg-red-900/60 text-red-400 border border-red-900/50 px-2 py-1 rounded text-[10px] font-bold disabled:opacity-30 transition"
-              title="Presiona justo en el golpe fuerte del bombo para alinear la grilla instantáneamente"
-            >
-              SET DOWNBEAT
-            </button>
-            <button 
-              onClick={handleLiveTap} 
-              className="bg-blue-900/30 hover:bg-blue-900/60 text-blue-400 border border-blue-900/50 px-2 py-1 rounded text-[10px] font-bold transition"
-              title="Presiona 4 veces al ritmo de la banda para ajustar el BPM en vivo"
-            >
-              LIVE TAP {liveTapTimes.length > 0 ? `(${liveTapTimes.length})` : ''}
-            </button>
+            <div className="flex space-x-1">
+              <button 
+                onClick={handleSetDownbeat} 
+                disabled={!isPlaying}
+                className="bg-orange-500/20 hover:bg-orange-500/40 text-orange-400 border border-orange-500/30 px-2 py-1 rounded text-[10px] font-bold disabled:opacity-30 transition"
+                title="Presiona justo en el golpe fuerte del bombo para alinear la grilla instantáneamente"
+              >
+                SET DOWNBEAT
+              </button>
+              <button 
+                onClick={handleAdaptiveTempo}
+                disabled={isAnalyzingTempo}
+                className="bg-purple-900/30 hover:bg-purple-900/60 text-purple-400 border border-purple-900/50 px-2 py-1 rounded text-[10px] font-bold transition disabled:opacity-50"
+                title="Detectar transientes en la batería para adaptarse a cambios de tempo automáticamente"
+              >
+                {isAnalyzingTempo ? 'ANALIZANDO...' : 'TEMPO ADAPTATIVO'}
+              </button>
+              <button 
+                onClick={handleLiveTap} 
+                className="bg-blue-900/30 hover:bg-blue-900/60 text-blue-400 border border-blue-900/50 px-2 py-1 rounded text-[10px] font-bold transition"
+                title="Presiona 4 veces al ritmo de la banda para ajustar el BPM en vivo"
+              >
+                LIVE TAP {liveTapTimes.length > 0 ? `(${liveTapTimes.length})` : ''}
+              </button>
+            </div>
           </div>
         </div>
 

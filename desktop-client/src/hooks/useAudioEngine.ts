@@ -813,6 +813,10 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     return new Blob([arrayBuffer], { type: 'audio/wav' });
   };
 
+  const getBuffer = (stemId: string) => {
+    return buffers.current.get(stemId);
+  };
+
   return {
     loadStems,
     play,
@@ -828,6 +832,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     loadProgress,
     totalDuration,
     preRollDuration: preRollDurationRef.current,
-    exportLiveMix
+    exportLiveMix,
+    getBuffer
   };
 };
