@@ -20,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { songId, manualKey, timeSignature, stems, detectedBpm, firstBeat, beatTimes } = req.body;
+    const { songId, manualKey, timeSignature, stems, detectedBpm, firstBeat, beatTimes, sections } = req.body;
     
     if (!songId) return res.status(400).json({ error: 'Falta songId' });
     if (!stems || stems.length === 0) return res.status(404).json({ error: 'No stems' });
@@ -32,22 +32,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const finalCalculatedBpm = Number(detectedBpm) || 120;
     const extractedFirstBeat = firstBeat || 0.0;
     const extractedBeatTimes = beatTimes || [];
-    const finalCalculatedKey = manualKey || "C Major";
 
-    console.log(`[IA] Iniciando Replicate Async... Stem: ${selectedStem.name}`);
+    // Priorizar stem de instrumentos/acordes si existe (Ej: teclado, guitarra)
+    let chordStem = stems.find((s: any) => s.name.toLowerCase().includes('keys') || s.name.toLowerCase().includes('teclado') || s.name.toLowerCase().includes('piano') || s.name.toLowerCase().includes('guitar'));
+    if (!chordStem) chordStem = selectedStem;
+
+    console.log(`[IA] Enviando ${chordStem.name} a Replicate TriadMusic (Acordes)`);
 
     const prediction = await replicate.predictions.create({
-      version: "be95be0303fd42000c413aec595922499f8b946d65416f31fb0034c2daf81f19",
+      version: 'be95be0303fd42000c413aec595922499f8b946d65416f31fb0034c2daf81f19',
       input: {
-        audio: selectedStem.file_url,
-        return_lab_file: false,
-        chord_vocabulary: 'submission'
+        audio: chordStem.file_url
       }
     });
 
-    const finalSections = [
-      { time: Number(extractedFirstBeat.toFixed(3)), section: "INTRO" }
-    ];
+    const finalSections = (sections && sections.length > 0) 
+      ? sections 
+      : [ { time: Number(extractedFirstBeat.toFixed(3)), section: "INTRO" } ];
 
     const initialPrompterData = {
       bpm: Number(finalCalculatedBpm.toFixed(2)), 

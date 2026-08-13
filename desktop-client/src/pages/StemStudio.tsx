@@ -109,9 +109,17 @@ export default function StemStudio() {
              rawOutput = await beatFileRes.json();
            }
            
+           const newSections = [];
+           if (rawOutput.segments && rawOutput.segments.length > 0) {
+             rawOutput.segments.forEach((seg: any) => {
+                newSections.push({ name: seg.label.toUpperCase(), time: seg.start });
+             });
+           }
+
            beatsPrompterData = {
              bpm: rawOutput.bpm,
-             beatTimes: rawOutput.beats || []
+             beatTimes: rawOutput.beats || [],
+             sections: newSections
            };
            
         } else {
@@ -143,7 +151,8 @@ export default function StemStudio() {
           stems,
           detectedBpm: beatsPrompterData.bpm,
           firstBeat: beatsPrompterData.beatTimes?.[0] || 0,
-          beatTimes: beatsPrompterData.beatTimes || []
+          beatTimes: beatsPrompterData.beatTimes || [],
+          sections: beatsPrompterData.sections || []
         })
       });
       
