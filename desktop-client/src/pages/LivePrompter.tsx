@@ -257,12 +257,16 @@ export default function LivePrompter() {
       return;
     }
     
-    let targetStem = stems.find(s => s.name.toLowerCase().includes('click') || s.name.toLowerCase().includes('metronomo'));
+    // 1. Preferir pista Maestra (Master)
+    let targetStem = stems.find((s: any) => s.metadata?.is_master === true);
+    // 2. Fallback a batería o click
+    if (!targetStem) targetStem = stems.find(s => s.name.toLowerCase().includes('drum') || s.name.toLowerCase().includes('bateria'));
+    if (!targetStem) targetStem = stems.find(s => s.name.toLowerCase().includes('click') || s.name.toLowerCase().includes('metronomo'));
+    // 3. Último recurso
+    if (!targetStem) targetStem = stems[0];
+    
     if (!targetStem) {
-      targetStem = stems.find(s => s.name.toLowerCase().includes('drum') || s.name.toLowerCase().includes('bateria'));
-    }
-    if (!targetStem) {
-      alert("No se encontró pista de Click o Batería para analizar.");
+      alert("No se encontró ninguna pista para analizar.");
       return;
     }
 

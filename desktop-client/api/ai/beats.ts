@@ -18,9 +18,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!songId) return res.status(400).json({ error: 'Falta songId' });
     if (!stems || stems.length === 0) return res.status(404).json({ error: 'No stems' });
 
-    let selectedStem = stems.find((s: any) => s.name.toLowerCase().includes('click') || s.name.toLowerCase().includes('metronomo'));
+    // 1. Preferir siempre la pista Maestra (Master) porque contiene todos los instrumentos (ideal para silencios de batería)
+    let selectedStem = stems.find((s: any) => s.metadata && s.metadata.is_master === true);
+    // 2. Fallback a batería o metrónomo si no hay master
     if (!selectedStem) selectedStem = stems.find((s: any) => s.name.toLowerCase().includes('drum') || s.name.toLowerCase().includes('bateria'));
-    if (!selectedStem) selectedStem = stems.find((s: any) => s.metadata && s.metadata.is_master === true) || stems[0];
+    if (!selectedStem) selectedStem = stems.find((s: any) => s.name.toLowerCase().includes('click') || s.name.toLowerCase().includes('metronomo'));
+    // 3. Último recurso, cualquier pista
+    if (!selectedStem) selectedStem = stems[0];
 
     console.log(`[IA-Beats] Iniciando Replicate Async... Stem: ${selectedStem.name}`);
 

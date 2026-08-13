@@ -205,9 +205,9 @@ function cleanDuplicatedPeaks(peaks: Peak[], sampleRate: number, expectedBpm: nu
 }
 
 /**
- * Algoritmo de Interpolación de Inercia.
+ * Algoritmo de Interpolaciï¿½n de Inercia.
  * Si encuentra silencios prolongados (huecos sin transientes), 
- * los rellena matemáticamente usando la inercia del tempo previo.
+ * los rellena matemï¿½ticamente usando la inercia del tempo previo.
  */
 export function interpolateMissingBeats(beats: number[]): number[] {
   if (beats.length < 5) return beats;
@@ -217,20 +217,27 @@ export function interpolateMissingBeats(beats: number[]): number[] {
 
   for (let i = 1; i < beats.length; i++) {
     const dt = beats[i] - filledBeats[filledBeats.length - 1];
-    
-    // Si el espacio es más de 1.5 veces el intervalo promedio (significa que se saltó al menos 1 beat)
-    if (dt > lastValidInterval * 1.5) {
-      // Calcular cuántos beats caben en ese hueco basándose en el último tempo
-      const missingBeatsCount = Math.round(dt / lastValidInterval) - 1;
-      const actualInterval = dt / (missingBeatsCount + 1);
-      
-      for (let j = 1; j <= missingBeatsCount; j++) {
-        filledBeats.push(filledBeats[filledBeats.length - 1] + actualInterval);
+        // Si el espacio es ms de 1.5 veces el intervalo promedio (significa que se salt al menos 1 beat)
+      if (dt > lastValidInterval * 1.5) {
+        // Calcular cuntos beats caben en ese hueco basndose en el ltimo tempo
+        let missingBeatsCount = Math.round(dt / lastValidInterval) - 1;
+        
+        // LIMITAR: No extrapolar ciegamente ms de 4 beats (1 comps entero). 
+        // Si el hueco es mayor a eso, es mejor dejar que el audio gue el prximo beat real.
+        if (missingBeatsCount > 4) {
+          missingBeatsCount = 0; // Cancelar interpolacin para huecos masivos
+        }
+        
+        if (missingBeatsCount > 0) {
+          const actualInterval = dt / (missingBeatsCount + 1);
+          for (let j = 1; j <= missingBeatsCount; j++) {
+            filledBeats.push(filledBeats[filledBeats.length - 1] + actualInterval);
+          }
+        }
+      } else {
+        // Actualizar inercia (Promedio mvil simple para suavizar)
+        lastValidInterval = (lastValidInterval * 0.7) + (dt * 0.3);
       }
-    } else {
-      // Actualizar inercia (Promedio móvil simple para suavizar)
-      lastValidInterval = (lastValidInterval * 0.7) + (dt * 0.3);
-    }
     
     filledBeats.push(beats[i]);
   }
