@@ -346,14 +346,21 @@ export default function LivePrompter() {
       // 3. Procesar salida
       console.log("BeatNet Raw Output:", rawOutput);
       
-      // BeatNet usually outputs an array of [time, label] or objects {time, label}
-      // If it's an array of numbers, it's just beat times.
-      // We will parse whatever comes out gracefully.
+      let actualOutput = rawOutput;
+      
+      // Si la salida es un objeto que contiene una URL de un archivo JSON con los beats
+      if (actualOutput && typeof actualOutput === 'object' && actualOutput.beats && typeof actualOutput.beats === 'string' && actualOutput.beats.startsWith('http')) {
+        console.log("Fetching JSON from URL:", actualOutput.beats);
+        const beatFileRes = await fetch(actualOutput.beats);
+        actualOutput = await beatFileRes.json();
+        console.log("Fetched actual output:", actualOutput);
+      }
+      
       const beatTimes: number[] = [];
       let firstDownbeatTime: number | null = null;
       
-      if (Array.isArray(rawOutput)) {
-        rawOutput.forEach(item => {
+      if (Array.isArray(actualOutput)) {
+        actualOutput.forEach(item => {
           if (Array.isArray(item) && item.length >= 2) {
              const time = Number(item[0]);
              const label = String(item[1]);
