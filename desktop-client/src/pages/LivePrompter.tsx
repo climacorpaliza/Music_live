@@ -320,7 +320,7 @@ export default function LivePrompter() {
       let rawOutput = null;
       let attempts = 0;
       
-      while (!isDone && attempts < 60) {
+      while (!isDone && attempts < 150) {
         await new Promise(r => setTimeout(r, 2000));
         attempts++;
         
@@ -341,7 +341,7 @@ export default function LivePrompter() {
         }
       }
       
-      if (!isDone) throw new Error("Timeout esperando a BeatNet");
+      if (!isDone) throw new Error("Timeout: La IA de Replicate está tardando demasiado en inicializar (Cold Boot). Intenta de nuevo.");
       
       // 3. Procesar salida
       console.log("BeatNet Raw Output:", rawOutput);
