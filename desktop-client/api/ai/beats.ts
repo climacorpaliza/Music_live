@@ -26,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Call BeatNet model
     const prediction = await replicate.predictions.create({
-      model: "e7mac/beatnet", 
+      version: "d4e1c2fc15c5ba3e4fb0968e81c4c95ad59c6ec461b21cabbac33f9b5e617b2c", 
       input: {
         audio: selectedStem.file_url
       }
