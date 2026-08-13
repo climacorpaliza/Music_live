@@ -116,11 +116,16 @@ function getIntervals(peaks: Peak[]): IntervalGroup[] {
 
 /**
  * Una implementación de detección más robusta (Adaptive Onset Detection).
- * Recorre el audio y encuentra transientes que cruzan un umbral, evitando rebotes.
+ * Optimizado: Downsampling y tamaño de ventana grande para procesamiento ultrarrápido.
  */
 export async function detectBeatsAdaptive(buffer: AudioBuffer, expectedBpm: number): Promise<number[]> {
+  // Optimizacion 1: Downsampling. No necesitamos 44.1kHz para detectar graves.
+  // Renderizamos a 11025Hz. Es 4x más rápido de procesar en JS.
+  const targetSampleRate = 11025; 
   const offlineCtx = new (window.OfflineAudioContext || (window as any).webkitOfflineAudioContext)(
-    1, buffer.length, buffer.sampleRate
+    1, 
+    Math.floor(buffer.duration * targetSampleRate), 
+    targetSampleRate
   );
 
   const source = offlineCtx.createBufferSource();
@@ -140,19 +145,28 @@ export async function detectBeatsAdaptive(buffer: AudioBuffer, expectedBpm: numb
 
   const beatTimes: number[] = [];
   
-  // Calcular energía RMS en ventanas cortas
-  const windowSize = Math.floor(buffer.sampleRate * 0.05); // 50ms window
+  // Calcular energía RMS en ventanas.
+  // Optimizacion 2: Ventana de 50ms, pero con un "hop size" (salto) de 10ms.
+  // Esto reduce enormemente el número de iteraciones comparado con iterar sample a sample.
+  const windowSize = Math.floor(targetSampleRate * 0.05); // 50ms
+  const hopSize = Math.floor(targetSampleRate * 0.01); // 10ms
+  
   let energies = [];
-  for (let i = 0; i < data.length; i += windowSize) {
+  for (let i = 0; i < data.length - windowSize; i += hopSize) {
     let sum = 0;
-    for (let j = 0; j < windowSize && (i+j) < data.length; j++) {
+    // Bucle interno corto
+    for (let j = 0; j < windowSize; j++) {
       sum += data[i+j] * data[i+j];
     }
     energies.push(Math.sqrt(sum / windowSize));
   }
 
   // Encontrar el umbral general (mean + delta)
-  const meanEnergy = energies.reduce((a,b)=>a+b, 0) / (energies.length || 1);
+  let totalEnergy = 0;
+  for (let i = 0; i < energies.length; i++) {
+    totalEnergy += energies[i];
+  }
+  const meanEnergy = totalEnergy / (energies.length || 1);
   const threshold = meanEnergy * 1.5;
 
   let lastBeatTime = -999;
@@ -161,7 +175,7 @@ export async function detectBeatsAdaptive(buffer: AudioBuffer, expectedBpm: numb
   for (let i = 1; i < energies.length - 1; i++) {
     // Si es un pico local y supera el umbral
     if (energies[i] > energies[i-1] && energies[i] > energies[i+1] && energies[i] > threshold) {
-      const timeSeconds = (i * windowSize) / buffer.sampleRate;
+      const timeSeconds = (i * hopSize) / targetSampleRate;
       
       // Debounce: solo aceptar si pasó suficiente tiempo desde el último beat
       if (timeSeconds - lastBeatTime > minInterval) {

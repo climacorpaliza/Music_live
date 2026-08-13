@@ -284,11 +284,120 @@ export default function LivePrompter() {
       
       await loadStems(prompterData.bpm, baseOffset + manualGridOffset, prompterData.timeSignature, beatTimes, { ...prompterData, beatTimes });
       
-      alert(`Análisis completado. Se detectaron ${beatTimes.length} beats.`);
+      alert(`Análisis Local completado. Se detectaron ${beatTimes.length} beats en milisegundos.`);
       
     } catch (e: any) {
       console.error(e);
-      alert('Error en análisis adaptativo: ' + e.message);
+      alert('Error en análisis adaptativo local: ' + e.message);
+    } finally {
+      setIsAnalyzingTempo(false);
+    }
+  };
+
+  const handleAdaptiveTempoAI = async () => {
+    if (!selectedSongId) {
+      alert("Selecciona una canción primero.");
+      return;
+    }
+    
+    setIsAnalyzingTempo(true);
+    try {
+      // 1. Iniciar análisis
+      const res = await fetch('/api/ai/beats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ songId: selectedSongId, stems })
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error iniciando IA BeatNet');
+      
+      const { predictionId } = data;
+      console.log("BeatNet prediction ID:", predictionId);
+      
+      // 2. Polling
+      let isDone = false;
+      let rawOutput = null;
+      let attempts = 0;
+      
+      while (!isDone && attempts < 60) {
+        await new Promise(r => setTimeout(r, 2000));
+        attempts++;
+        
+        const statusRes = await fetch('/api/ai/beats_status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ predictionId })
+        });
+        
+        const statusData = await statusRes.json();
+        if (!statusRes.ok) throw new Error(statusData.error || 'Error en polling');
+        
+        if (statusData.done) {
+          isDone = true;
+          rawOutput = statusData.data;
+        } else if (statusData.status === 'failed' || statusData.status === 'canceled') {
+          throw new Error('La predicción de BeatNet falló en Replicate.');
+        }
+      }
+      
+      if (!isDone) throw new Error("Timeout esperando a BeatNet");
+      
+      // 3. Procesar salida
+      console.log("BeatNet Raw Output:", rawOutput);
+      
+      // BeatNet usually outputs an array of [time, label] or objects {time, label}
+      // If it's an array of numbers, it's just beat times.
+      // We will parse whatever comes out gracefully.
+      const beatTimes: number[] = [];
+      let firstDownbeatTime: number | null = null;
+      
+      if (Array.isArray(rawOutput)) {
+        rawOutput.forEach(item => {
+          if (Array.isArray(item) && item.length >= 2) {
+             const time = Number(item[0]);
+             const label = String(item[1]);
+             beatTimes.push(time);
+             if ((label === "1" || label.toLowerCase().includes("downbeat")) && firstDownbeatTime === null) {
+               firstDownbeatTime = time;
+             }
+          } else if (typeof item === 'object' && item !== null && 'time' in item) {
+             beatTimes.push(Number(item.time));
+             const label = String(item.label || item.beat || '');
+             if ((label === "1" || label.toLowerCase().includes("downbeat")) && firstDownbeatTime === null) {
+               firstDownbeatTime = Number(item.time);
+             }
+          } else if (typeof item === 'number') {
+             beatTimes.push(item);
+          }
+        });
+      }
+
+      if (beatTimes.length === 0) {
+         throw new Error("No se detectaron beats en la salida de la IA.");
+      }
+
+      const baseOffset = firstDownbeatTime !== null 
+        ? firstDownbeatTime 
+        : (prompterData.firstBeatOffset || 0);
+
+      setPrompterData(prev => ({ 
+        ...prev, 
+        beatTimes,
+        firstBeatOffset: baseOffset
+      }));
+      
+      await loadStems(prompterData.bpm, baseOffset + manualGridOffset, prompterData.timeSignature, beatTimes, { 
+        ...prompterData, 
+        beatTimes,
+        firstBeatOffset: baseOffset
+      });
+      
+      alert(`Análisis IA Pro completado. Se detectaron ${beatTimes.length} beats.${firstDownbeatTime ? ' Downbeat detectado y sincronizado.' : ''}`);
+      
+    } catch (e: any) {
+      console.error(e);
+      alert('Error en análisis IA: ' + e.message);
     } finally {
       setIsAnalyzingTempo(false);
     }
@@ -531,10 +640,19 @@ export default function LivePrompter() {
               <button 
                 onClick={handleAdaptiveTempo}
                 disabled={isAnalyzingTempo}
-                className="bg-purple-900/30 hover:bg-purple-900/60 text-purple-400 border border-purple-900/50 px-2 py-1 rounded text-[10px] font-bold transition disabled:opacity-50"
-                title="Detectar transientes en la batería para adaptarse a cambios de tempo automáticamente"
+                className="bg-blue-900/30 hover:bg-blue-900/60 text-blue-400 border border-blue-900/50 px-2 py-1 rounded text-[10px] font-bold transition disabled:opacity-50 flex items-center space-x-1"
+                title="Detectar transientes localmente (Muy rápido)"
               >
-                {isAnalyzingTempo ? 'ANALIZANDO...' : 'TEMPO ADAPTATIVO'}
+                <span>{isAnalyzingTempo ? 'ANALIZANDO...' : 'TEMPO LOCAL'}</span>
+              </button>
+              <button 
+                onClick={handleAdaptiveTempoAI}
+                disabled={isAnalyzingTempo}
+                className="bg-purple-900/30 hover:bg-purple-900/60 text-purple-400 border border-purple-900/50 px-2 py-1 rounded text-[10px] font-bold transition disabled:opacity-50 flex items-center space-x-1"
+                title="Usar Inteligencia Artificial para detectar tempo y downbeats exactos (Requiere Internet)"
+              >
+                <Activity size={10} className="text-purple-300" />
+                <span>IA PRO</span>
               </button>
               <button 
                 onClick={handleLiveTap} 
