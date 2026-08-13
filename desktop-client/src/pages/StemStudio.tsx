@@ -109,7 +109,7 @@ export default function StemStudio() {
              rawOutput = await beatFileRes.json();
            }
            
-           const newSections = [];
+           const newSections: any[] = [];
            if (rawOutput.segments && rawOutput.segments.length > 0) {
              rawOutput.segments.forEach((seg: any) => {
                 newSections.push({ name: seg.label.toUpperCase(), time: seg.start });
