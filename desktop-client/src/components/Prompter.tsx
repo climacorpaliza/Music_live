@@ -79,24 +79,57 @@ export const Prompter: React.FC<PrompterProps> = ({ currentTime, bpm, timeSignat
 
   // Enhance chords with duration and AUTO-QUANTIZE for block rendering
   const chordBlocks = useMemo(() => {
+    // Si no hay beatTimes (grilla real de IA), o está vacío, fallamos suavemente a la grilla matemática
+    const useRealGrid = beatTimes && beatTimes.length > 1;
+
     const defaultOffset = chords.length > 0 ? chords[0].time : 0;
     const baseOffsetTime = baseOffset !== undefined ? baseOffset : defaultOffset;
     const gridOffsetTime = baseOffsetTime + (gridOffset || 0);
     const beatDuration = activeBpm > 0 ? 60 / activeBpm : 0.5;
     const eighthNoteDuration = beatDuration / 2;
 
-    // Primera pasada: Cuantizar todos los acordes a la octava (corchea) más cercana de la grilla
+    // Crear grilla de corcheas basada en beatTimes reales
+    let eighthGrid: number[] = [];
+    if (useRealGrid) {
+      eighthGrid = [];
+      for (let i = 0; i < beatTimes.length - 1; i++) {
+        eighthGrid.push(beatTimes[i]); // Downbeat
+        eighthGrid.push((beatTimes[i] + beatTimes[i + 1]) / 2); // Mid-beat (Corchea)
+      }
+      eighthGrid.push(beatTimes[beatTimes.length - 1]);
+    }
+
+    // Primera pasada: Cuantizar todos los acordes
     const quantizedChords = chords.map(chord => {
       let qTime = chord.time;
-      // No cuantizamos el primer acorde porque es el Ancla (Offset) de la grilla
-      if (activeBpm > 0 && chord.time !== gridOffsetTime) {
-        const timeFromOffset = chord.time - gridOffsetTime;
-        const eighthNotes = Math.round(timeFromOffset / eighthNoteDuration);
-        const snappedTime = gridOffsetTime + (eighthNotes * eighthNoteDuration);
+      
+      if (useRealGrid && eighthGrid.length > 0) {
+        // Cuantización Magnética a la grilla real de la IA (beatTimes)
+        let closest = eighthGrid[0];
+        let minDiff = Math.abs(closest - chord.time);
         
-        // Solo cuantizamos si el margen de error de la IA es menor a 0.25s
-        if (Math.abs(snappedTime - chord.time) < 0.25) {
-          qTime = snappedTime;
+        for (let i = 1; i < eighthGrid.length; i++) {
+          const diff = Math.abs(eighthGrid[i] - chord.time);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closest = eighthGrid[i];
+          }
+        }
+        
+        // Solo cuantizamos si el acorde original cayó muy cerca de una corchea real (margen de 0.25s)
+        if (minDiff < 0.25) {
+          qTime = closest;
+        }
+      } else {
+        // Fallback: Cuantización Matemática Rígida (Antigua)
+        if (activeBpm > 0 && chord.time !== gridOffsetTime) {
+          const timeFromOffset = chord.time - gridOffsetTime;
+          const eighthNotes = Math.round(timeFromOffset / eighthNoteDuration);
+          const snappedTime = gridOffsetTime + (eighthNotes * eighthNoteDuration);
+          
+          if (Math.abs(snappedTime - chord.time) < 0.25) {
+            qTime = snappedTime;
+          }
         }
       }
       return { ...chord, time: qTime };
@@ -112,7 +145,7 @@ export const Prompter: React.FC<PrompterProps> = ({ currentTime, bpm, timeSignat
         isActive: currentTime >= chord.time && currentTime < chord.time + duration
       };
     });
-  }, [chords, currentTime, activeBpm, gridOffset]);
+  }, [chords, currentTime, activeBpm, gridOffset, beatTimes]);
 
   const handleVamp = () => {
     if (activeSectionIndex >= 0 && onVampTrigger) {
