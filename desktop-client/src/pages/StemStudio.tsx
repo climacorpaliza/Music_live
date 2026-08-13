@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import StemUploader from '../components/StemUploader';
 import { Music, FolderPlus, Disc3, FileAudio, Loader2, Trash2, Sparkles, CheckCircle, RefreshCw } from 'lucide-react';
-import TempoWorker from '../workers/tempoWorker?worker';
 
 const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -66,87 +65,62 @@ export default function StemStudio() {
     }
   };
 
-  const analyzeTempoLocally = async (url: string) => {
-    return new Promise<any>(async (resolve) => {
-      try {
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        const ctx = new AudioContextClass();
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Error al descargar audio para analizar');
-        const arrayBuffer = await response.arrayBuffer();
-        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-        
-        let audioData: Float32Array;
-        // Usar el primer canal (mono) para el análisis
-        if (audioBuffer.numberOfChannels === 2) {
-          const channel1Data = audioBuffer.getChannelData(0);
-          const channel2Data = audioBuffer.getChannelData(1);
-          const length = channel1Data.length;
-          audioData = new Float32Array(length);
-          for (let i = 0; i < length; i++) {
-            audioData[i] = (channel1Data[i] + channel2Data[i]) / 2.0;
-          }
-        } else {
-          audioData = audioBuffer.getChannelData(0);
-        }
-
-        const worker = new TempoWorker();
-        
-        worker.onmessage = (e) => {
-          if (e.data.success) {
-            resolve({
-              bpm: e.data.bpm,
-              firstBeat: e.data.firstBeat,
-              beatTimes: e.data.beatTimes
-            });
-          } else {
-            console.error("[Worker Error]", e.data.error);
-            resolve(null);
-          }
-          worker.terminate();
-        };
-
-        worker.onerror = (err) => {
-          console.error("[Worker fatal error]", err);
-          resolve(null);
-          worker.terminate();
-        };
-
-        // Pasamos el buffer completo y el sampleRate (Transferable)
-        worker.postMessage({ buffer: audioData.buffer, sampleRate: ctx.sampleRate }, [audioData.buffer]);
-        
-      } catch (err) {
-        console.error("[Frontend DSP] Error analizando tempo:", err);
-        resolve(null);
-      }
-    });
-  };
-
   const handleGenerateChordsAI = async () => {
     if (!selectedSongId) return;
     setIsGeneratingAI(true);
     setAiSuccessMessage(null);
     
     try {
-      // 1. Detección Local de BPM para evitar colapsos en Vercel
-      let detectedBpm = null;
-      let firstBeat = 0.0;
-      let beatTimes: number[] = [];
+      // ---------------------------------------------------------
+      // PASO 1: DETECCIÓN DE TEMPO Y SECCIONES (SAKEMIN AI)
+      // ---------------------------------------------------------
+      setAiSuccessMessage(`Paso 1/2: Iniciando análisis de Tempo...`);
 
-      const drumStem = stems.find(s => s.name.toLowerCase().includes('drum') || s.name.toLowerCase().includes('bater') || s.name.toLowerCase().includes('perc'));
-      const masterStem = stems.find(s => s.name.toLowerCase().includes('master')) || stems[0];
-      const targetStem = drumStem || masterStem;
+      const beatsRes = await fetch('/api/ai/beats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ songId: selectedSongId, stems })
+      });
+      const beatsData = await beatsRes.json();
+      if (!beatsRes.ok) throw new Error(beatsData.error || 'Error iniciando Sakemin');
+      
+      const beatsPredictionId = beatsData.predictionId;
+      let isBeatsDone = false;
+      let beatsPrompterData = null;
+      let pollCount = 1;
 
-      if (targetStem) {
-        const tempoData = await analyzeTempoLocally(targetStem.file_url);
-        if (tempoData) {
-          detectedBpm = tempoData.bpm;
-          firstBeat = tempoData.firstBeat;
-          beatTimes = tempoData.beatTimes;
+      while (!isBeatsDone && pollCount < 300) {
+        await new Promise(r => setTimeout(r, 2000));
+        const statusRes = await fetch('/api/ai/beats_status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ predictionId: beatsPredictionId })
+        });
+        const statusData = await statusRes.json();
+        if (!statusRes.ok) throw new Error(statusData.error || 'Error en polling tempo');
+        
+        if (statusData.done) {
+           isBeatsDone = true;
+           beatsPrompterData = statusData.data; // Aquí está el prompterData guardado en la BD
+        } else {
+           if (statusData.status === 'starting' && pollCount > 10) {
+             setAiSuccessMessage(`Paso 1/2: IA Tempo despertando (Cold Boot, puede tardar hasta 5-10 min) (Intento ${pollCount})`);
+           } else {
+             setAiSuccessMessage(`Paso 1/2: IA Tempo Procesando... Estado: ${statusData.status} (Intento ${pollCount})`);
+           }
         }
+        pollCount++;
       }
 
-      // 2. Enviar a Vercel para extracción de Acordes (Replicate) y guardado
+      if (!isBeatsDone || !beatsPrompterData) {
+         throw new Error('Timeout esperando el análisis de Tempo');
+      }
+
+      // ---------------------------------------------------------
+      // PASO 2: DETECCIÓN DE ACORDES Y CUANTIZACIÓN MAGNÉTICA
+      // ---------------------------------------------------------
+      setAiSuccessMessage(`Paso 2/2: Tempo detectado. Iniciando análisis de Armonía...`);
+
       const res = await fetch('/api/ai/chords', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -154,68 +128,57 @@ export default function StemStudio() {
           songId: selectedSongId,
           manualKey: manualKey || undefined,
           timeSignature,
-          stems, // Send stems so backend can find chordStem
-          detectedBpm,
-          firstBeat,
-          beatTimes
+          stems,
+          detectedBpm: beatsPrompterData.bpm,
+          firstBeat: beatsPrompterData.beatTimes?.[0] || 0,
+          beatTimes: beatsPrompterData.beatTimes || []
         })
       });
       
       const data = await res.json();
-      
-      if (!res.ok) {
-        throw new Error(data.error || 'Error desconocido del servidor IA');
+      if (!res.ok) throw new Error(data.error || 'Error desconocido del servidor IA');
+
+      const { predictionId, prompterData } = data; // prompterData enviado por la API chords
+
+      // 3. POLLING DE ACORDES
+      let chordsPollCount = 1;
+      let isChordsDone = false;
+
+      while (!isChordsDone && chordsPollCount < 300) {
+        await new Promise(r => setTimeout(r, 2000));
+        const statusRes = await fetch('/api/ai/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            predictionId,
+            prompterData, // Se le pasa el prompterData actual para que la IA en el backend haga la cuantización a la grilla
+            songId: selectedSongId
+          })
+        });
+        
+        const statusData = await statusRes.json();
+        if (!statusRes.ok) throw new Error(statusData.error || 'Error en polling acordes');
+
+        if (statusData.done) {
+          isChordsDone = true;
+          setAiSuccessMessage("¡Tempo y Acordes generados y guardados exitosamente!");
+          setTimeout(() => setAiSuccessMessage(null), 5000);
+        } else {
+          if (statusData.status === 'starting' && chordsPollCount > 10) {
+            setAiSuccessMessage(`Paso 2/2: IA Acordes despertando (Cold Boot). Puede tomar de 5 a 10 min... (Intento ${chordsPollCount})`);
+          } else {
+            setAiSuccessMessage(`Paso 2/2: IA Acordes Procesando... Estado: ${statusData.status} (Intento ${chordsPollCount})`);
+          }
+        }
+        chordsPollCount++;
       }
 
-      const { predictionId, prompterData } = data;
-      setAiSuccessMessage(`Modelo iniciado... Procesando acordes en la nube.`);
-
-      // 3. POLLING: Consultar a Vercel recursivamente para no saturar las conexiones (Timeout evasion)
-      let pollCount = 1;
-      const poll = async () => {
-        try {
-          const statusRes = await fetch('/api/ai/status', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              predictionId,
-              prompterData,
-              songId: selectedSongId
-            })
-          });
-          
-          const statusData = await statusRes.json();
-          if (!statusRes.ok) throw new Error(statusData.error || 'Error en polling');
-
-          if (statusData.done) {
-            setIsGeneratingAI(false);
-            setAiSuccessMessage("¡Acordes generados y guardados en la nube exitosamente!");
-            setTimeout(() => setAiSuccessMessage(null), 5000);
-          } else {
-            let msg = `IA Procesando... Estado: ${statusData.status} (Intento ${pollCount})`;
-            if (statusData.status === 'starting' && pollCount > 10) {
-              msg = `Servidor IA Despertando GPU (Cold Boot). Puede tomar de 5 a 10 minutos... (Intento ${pollCount})`;
-            }
-            setAiSuccessMessage(msg);
-            pollCount++;
-            setTimeout(poll, 3000);
-          }
-        } catch (pollErr: any) {
-          setIsGeneratingAI(false);
-          console.error("Error en polling:", pollErr);
-          alert(`Falló la comprobación de IA: ${pollErr.message}`);
-        }
-      };
-      
-      // Iniciar el polling
-      setTimeout(poll, 3000);
-
     } catch (error: any) {
-      console.error("Error saving AI chords:", error);
-      alert(`Falló la detección IA: ${error.message}\n(Asegúrate de que el backend en Next.js esté corriendo en el puerto 3000 o configura VITE_API_URL)`);
+      console.error("Error saving AI:", error);
+      alert(`Falló la detección IA: ${error.message}`);
+    } finally {
       setIsGeneratingAI(false);
     }
-    // No usamos `finally { setIsGeneratingAI(false); }` aquí porque el polling maneja el final del proceso.
   };
 
   const deleteStem = async (stemId: string) => {
