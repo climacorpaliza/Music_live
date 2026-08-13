@@ -192,7 +192,11 @@ export default function StemStudio() {
             setAiSuccessMessage("¡Acordes generados y guardados en la nube exitosamente!");
             setTimeout(() => setAiSuccessMessage(null), 5000);
           } else {
-            setAiSuccessMessage(`IA Procesando... Estado: ${statusData.status} (Intento ${pollCount})`);
+            let msg = `IA Procesando... Estado: ${statusData.status} (Intento ${pollCount})`;
+            if (statusData.status === 'starting' && pollCount > 10) {
+              msg = `Servidor IA Despertando GPU (Cold Boot). Puede tomar de 5 a 10 minutos... (Intento ${pollCount})`;
+            }
+            setAiSuccessMessage(msg);
             pollCount++;
             setTimeout(poll, 3000);
           }
