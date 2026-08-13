@@ -101,7 +101,19 @@ export default function StemStudio() {
         
         if (statusData.done) {
            isBeatsDone = true;
-           beatsPrompterData = statusData.data; // Aquí está el prompterData guardado en la BD
+           
+           let rawOutput = statusData.data;
+           if (Array.isArray(rawOutput) && rawOutput.length > 0 && typeof rawOutput[0] === 'string' && rawOutput[0].startsWith('http')) {
+             console.log("Fetching JSON from URL:", rawOutput[0]);
+             const beatFileRes = await fetch(rawOutput[0]);
+             rawOutput = await beatFileRes.json();
+           }
+           
+           beatsPrompterData = {
+             bpm: rawOutput.bpm,
+             beatTimes: rawOutput.beats || []
+           };
+           
         } else {
            if (statusData.status === 'starting' && pollCount > 10) {
              setAiSuccessMessage(`Paso 1/2: IA Tempo despertando (Cold Boot, puede tardar hasta 5-10 min) (Intento ${pollCount})`);
