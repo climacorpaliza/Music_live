@@ -28,11 +28,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log(`[IA-Beats] Iniciando Replicate Async... Stem: ${selectedStem.name}`);
 
-    // Call BeatNet model
+    // Call Sakemin All-In-One model
     const prediction = await replicate.predictions.create({
-      version: "d4e1c2fc15c5ba3e4fb0968e81c4c95ad59c6ec461b21cabbac33f9b5e617b2c", 
+      version: "001b4137be6ac67bdc28cb5cffacf128b874f530258d033de23121e785cb7290", 
       input: {
-        audio: selectedStem.file_url || selectedStem.url
+        music_input: selectedStem.file_url || selectedStem.url,
+        include_embeddings: false,
+        include_activations: false,
+        model: "harmonix-all"
       }
     });
 

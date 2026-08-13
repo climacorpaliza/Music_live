@@ -327,7 +327,7 @@ export default function LivePrompter() {
       let rawOutput = null;
       let attempts = 0;
       
-      while (!isDone && attempts < 150) {
+      while (!isDone && attempts < 300) { // 10 minutes timeout for Sakemin cold boot
         await new Promise(r => setTimeout(r, 2000));
         attempts++;
         
@@ -344,77 +344,68 @@ export default function LivePrompter() {
           isDone = true;
           rawOutput = statusData.data;
         } else if (statusData.status === 'failed' || statusData.status === 'canceled') {
-          throw new Error('La predicción de BeatNet falló en Replicate.');
+          throw new Error('La predicción de IA falló en Replicate.');
         }
       }
       
       if (!isDone) throw new Error("Timeout: La IA de Replicate está tardando demasiado en inicializar (Cold Boot). Intenta de nuevo.");
       
-      // 3. Procesar salida
-      console.log("BeatNet Raw Output:", rawOutput);
+      // 3. Procesar salida de Sakemin
+      console.log("IA Raw Output:", rawOutput);
       
       let actualOutput = rawOutput;
       
-      // Si la salida es un objeto que contiene una URL de un archivo JSON con los beats
-      if (actualOutput && typeof actualOutput === 'object' && actualOutput.beats && typeof actualOutput.beats === 'string' && actualOutput.beats.startsWith('http')) {
-        console.log("Fetching JSON from URL:", actualOutput.beats);
-        const beatFileRes = await fetch(actualOutput.beats);
+      // Sakemin devuelve un array con 1 URL apuntando al JSON estructurado
+      if (Array.isArray(actualOutput) && actualOutput.length > 0 && typeof actualOutput[0] === 'string' && actualOutput[0].startsWith('http')) {
+        console.log("Fetching JSON from URL:", actualOutput[0]);
+        const beatFileRes = await fetch(actualOutput[0]);
         actualOutput = await beatFileRes.json();
         console.log("Fetched actual output:", actualOutput);
       }
       
-      const beatTimes: number[] = [];
-      let firstDownbeatTime: number | null = null;
+      const beatTimes: number[] = actualOutput.beats || [];
+      const downbeats: number[] = actualOutput.downbeats || [];
+      let firstDownbeatTime: number | null = downbeats.length > 0 ? downbeats[0] : null;
       
-      if (Array.isArray(actualOutput)) {
-        actualOutput.forEach(item => {
-          if (Array.isArray(item) && item.length >= 2) {
-             const time = Number(item[0]);
-             const label = String(item[1]);
-             beatTimes.push(time);
-             if ((label === "1" || label.toLowerCase().includes("downbeat")) && firstDownbeatTime === null) {
-               firstDownbeatTime = time;
-             }
-          } else if (typeof item === 'object' && item !== null && 'time' in item) {
-             beatTimes.push(Number(item.time));
-             const label = String(item.label || item.beat || '');
-             if ((label === "1" || label.toLowerCase().includes("downbeat")) && firstDownbeatTime === null) {
-               firstDownbeatTime = Number(item.time);
-             }
-          } else if (typeof item === 'number') {
-             beatTimes.push(item);
-          }
-        });
-      }
-
       if (beatTimes.length === 0) {
          throw new Error("No se detectaron beats en la salida de la IA.");
       }
       
-      // Interpolate missing beats in case of gaps in drum track
-      const finalBeatTimes = interpolateMissingBeats(beatTimes);
+      // Extraer secciones si la canción no tenía
+      const newSections = [...(prompterData.sections || [])];
+      if (actualOutput.segments && actualOutput.segments.length > 0 && newSections.length === 0) {
+        actualOutput.segments.forEach((seg: any) => {
+           newSections.push({ name: seg.label.toUpperCase(), time: seg.start });
+        });
+      }
 
       const baseOffset = firstDownbeatTime !== null 
         ? firstDownbeatTime 
         : (prompterData.firstBeatOffset || 0);
 
+      const detectedBpm = actualOutput.bpm || prompterData.bpm;
+
       setPrompterData(prev => ({ 
         ...prev, 
-        beatTimes: finalBeatTimes,
-        firstBeatOffset: baseOffset
+        bpm: detectedBpm,
+        beatTimes: beatTimes,
+        firstBeatOffset: baseOffset,
+        sections: newSections
       }));
       
-      await loadStems(prompterData.bpm, baseOffset + manualGridOffset, prompterData.timeSignature, finalBeatTimes, { 
+      await loadStems(detectedBpm, baseOffset + manualGridOffset, prompterData.timeSignature, beatTimes, { 
         ...prompterData, 
-        beatTimes: finalBeatTimes,
-        firstBeatOffset: baseOffset
+        bpm: detectedBpm,
+        beatTimes: beatTimes,
+        firstBeatOffset: baseOffset,
+        sections: newSections
       });
       
-      alert(`Análisis IA Pro completado. Se detectaron y alinearon ${finalBeatTimes.length} beats.${firstDownbeatTime ? ' Downbeat detectado y sincronizado.' : ''}`);
+      alert(`Análisis IA PRO MAX completado.\nBPM: ${detectedBpm}\nBeats: ${beatTimes.length}\nSecciones: ${newSections.length}`);
       
-    } catch (e: any) {
-      console.error(e);
-      alert('Error en análisis IA: ' + e.message);
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message);
     } finally {
       setIsAnalyzingTempo(false);
     }
