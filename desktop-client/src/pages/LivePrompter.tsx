@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAudioEngine, StemTrack } from '../hooks/useAudioEngine';
 import { Prompter } from '../components/Prompter';
 import { Play, Pause, Square, MonitorSpeaker, Mic, Edit3, Save, AlertCircle, Music, Headphones, Activity } from 'lucide-react';
-import { detectBeatsAdaptive } from '../utils/beatDetector';
+import { detectBeatsAdaptive, interpolateMissingBeats } from '../utils/beatDetector';
 import '../App.css';
 
 const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
@@ -274,7 +274,10 @@ export default function LivePrompter() {
 
     setIsAnalyzingTempo(true);
     try {
-      const beatTimes = await detectBeatsAdaptive(buffer, prompterData.bpm);
+      let beatTimes = await detectBeatsAdaptive(buffer, prompterData.bpm);
+      
+      // Interpolate missing beats
+      beatTimes = interpolateMissingBeats(beatTimes);
       
       setPrompterData(prev => ({ ...prev, beatTimes }));
       
@@ -383,6 +386,9 @@ export default function LivePrompter() {
       if (beatTimes.length === 0) {
          throw new Error("No se detectaron beats en la salida de la IA.");
       }
+      
+      // Interpolate missing beats in case of gaps in drum track
+      const finalBeatTimes = interpolateMissingBeats(beatTimes);
 
       const baseOffset = firstDownbeatTime !== null 
         ? firstDownbeatTime 
@@ -390,17 +396,17 @@ export default function LivePrompter() {
 
       setPrompterData(prev => ({ 
         ...prev, 
-        beatTimes,
+        beatTimes: finalBeatTimes,
         firstBeatOffset: baseOffset
       }));
       
-      await loadStems(prompterData.bpm, baseOffset + manualGridOffset, prompterData.timeSignature, beatTimes, { 
+      await loadStems(prompterData.bpm, baseOffset + manualGridOffset, prompterData.timeSignature, finalBeatTimes, { 
         ...prompterData, 
-        beatTimes,
+        beatTimes: finalBeatTimes,
         firstBeatOffset: baseOffset
       });
       
-      alert(`Análisis IA Pro completado. Se detectaron ${beatTimes.length} beats.${firstDownbeatTime ? ' Downbeat detectado y sincronizado.' : ''}`);
+      alert(`Análisis IA Pro completado. Se detectaron y alinearon ${finalBeatTimes.length} beats.${firstDownbeatTime ? ' Downbeat detectado y sincronizado.' : ''}`);
       
     } catch (e: any) {
       console.error(e);
@@ -408,6 +414,34 @@ export default function LivePrompter() {
     } finally {
       setIsAnalyzingTempo(false);
     }
+  };
+
+  const handleHalveTempo = async () => {
+    if (!prompterData.bpm) return;
+    const newBpm = prompterData.bpm / 2;
+    let newBeatTimes = prompterData.beatTimes;
+    if (newBeatTimes && newBeatTimes.length > 0) {
+      newBeatTimes = newBeatTimes.filter((_, i) => i % 2 === 0);
+    }
+    setPrompterData(prev => ({ ...prev, bpm: newBpm, beatTimes: newBeatTimes }));
+    await loadStems(newBpm, (prompterData.firstBeatOffset || 0) + manualGridOffset, prompterData.timeSignature, newBeatTimes, { ...prompterData, bpm: newBpm, beatTimes: newBeatTimes });
+  };
+
+  const handleDoubleTempo = async () => {
+    if (!prompterData.bpm) return;
+    const newBpm = prompterData.bpm * 2;
+    let newBeatTimes = prompterData.beatTimes;
+    if (newBeatTimes && newBeatTimes.length > 0) {
+      const doubled = [];
+      for (let i = 0; i < newBeatTimes.length - 1; i++) {
+        doubled.push(newBeatTimes[i]);
+        doubled.push((newBeatTimes[i] + newBeatTimes[i+1]) / 2);
+      }
+      doubled.push(newBeatTimes[newBeatTimes.length - 1]);
+      newBeatTimes = doubled;
+    }
+    setPrompterData(prev => ({ ...prev, bpm: newBpm, beatTimes: newBeatTimes }));
+    await loadStems(newBpm, (prompterData.firstBeatOffset || 0) + manualGridOffset, prompterData.timeSignature, newBeatTimes, { ...prompterData, bpm: newBpm, beatTimes: newBeatTimes });
   };
 
   const handleVolumeChange = (stemId: string, newVolume: number) => {
@@ -661,6 +695,22 @@ export default function LivePrompter() {
                 <Activity size={10} className="text-purple-300" />
                 <span>IA PRO</span>
               </button>
+              <div className="flex bg-black/40 rounded border border-gray-800">
+                <button 
+                  onClick={handleHalveTempo}
+                  className="px-2 py-1 text-[10px] text-gray-400 hover:text-white hover:bg-white/10 font-bold border-r border-gray-800 transition"
+                  title="Reducir el BPM a la mitad (Ideal para baladas)"
+                >
+                  ÷2
+                </button>
+                <button 
+                  onClick={handleDoubleTempo}
+                  className="px-2 py-1 text-[10px] text-gray-400 hover:text-white hover:bg-white/10 font-bold transition"
+                  title="Duplicar el BPM"
+                >
+                  x2
+                </button>
+              </div>
               <button 
                 onClick={handleLiveTap} 
                 className="bg-blue-900/30 hover:bg-blue-900/60 text-blue-400 border border-blue-900/50 px-2 py-1 rounded text-[10px] font-bold transition"

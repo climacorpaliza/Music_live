@@ -203,3 +203,37 @@ function cleanDuplicatedPeaks(peaks: Peak[], sampleRate: number, expectedBpm: nu
 
   return clean;
 }
+
+/**
+ * Algoritmo de Interpolación de Inercia.
+ * Si encuentra silencios prolongados (huecos sin transientes), 
+ * los rellena matemáticamente usando la inercia del tempo previo.
+ */
+export function interpolateMissingBeats(beats: number[]): number[] {
+  if (beats.length < 5) return beats;
+  
+  const filledBeats: number[] = [beats[0]];
+  let lastValidInterval = beats[1] - beats[0];
+
+  for (let i = 1; i < beats.length; i++) {
+    const dt = beats[i] - filledBeats[filledBeats.length - 1];
+    
+    // Si el espacio es más de 1.5 veces el intervalo promedio (significa que se saltó al menos 1 beat)
+    if (dt > lastValidInterval * 1.5) {
+      // Calcular cuántos beats caben en ese hueco basándose en el último tempo
+      const missingBeatsCount = Math.round(dt / lastValidInterval) - 1;
+      const actualInterval = dt / (missingBeatsCount + 1);
+      
+      for (let j = 1; j <= missingBeatsCount; j++) {
+        filledBeats.push(filledBeats[filledBeats.length - 1] + actualInterval);
+      }
+    } else {
+      // Actualizar inercia (Promedio móvil simple para suavizar)
+      lastValidInterval = (lastValidInterval * 0.7) + (dt * 0.3);
+    }
+    
+    filledBeats.push(beats[i]);
+  }
+
+  return filledBeats;
+}
