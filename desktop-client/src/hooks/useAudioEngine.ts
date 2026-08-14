@@ -406,7 +406,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     
     if (prompterData && prompterData.sections && !isCueMuted && prompterData.bpm) {
       const beatInterval = 60 / prompterData.bpm;
-      const beatsPerMeasure = parseInt(prompterData.timeSignature?.split('/')[0]) || 4;
+      const _beatsPerMeasure = parseInt(prompterData.timeSignature?.split('/')[0]) || 4;
       let bTimes: number[] = [];
       
       if (prompterData.beatTimes && prompterData.beatTimes.length > 0) {
@@ -667,7 +667,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
         const cueStem = stems.find(s => s.id === 'synthetic-cues');
         if (!cueStem || !cueStem.muted) {
            const beatInterval = 60 / prompterData.bpm;
-           const beatsPerMeasure = parseInt(prompterData.timeSignature?.split('/')[0]) || 4;
+           const _beatsPerMeasure = parseInt(prompterData.timeSignature?.split('/')[0]) || 4;
            let bTimes: number[] = [];
            if (prompterData.beatTimes && prompterData.beatTimes.length > 0) {
               
