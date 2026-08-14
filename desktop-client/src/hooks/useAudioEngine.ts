@@ -201,10 +201,10 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
 
     // Calcular preRollDuration basado en el BPM (1 compás extra)
     let preRollDuration = 0;
-    const beatsPerMeasure = parseInt(timeSignature.split('/')[0]) || 4;
-    if (bpm && bpm > 0) {
-      preRollDuration = (60 / bpm) * beatsPerMeasure;
-    }
+    // const beatsPerMeasure = parseInt(timeSignature.split('/')[0]) || 4;
+    // if (bpm && bpm > 0) {
+    //   preRollDuration = (60 / bpm) * beatsPerMeasure;
+    // }
     preRollDurationRef.current = preRollDuration;
     setTotalDuration(maxDuration);
 
