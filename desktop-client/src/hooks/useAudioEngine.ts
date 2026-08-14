@@ -371,14 +371,21 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
          }
       }
 
-      const gridOffsetTime = (prompterData.firstBeatOffset || 0) + manualGridOffset;
-      const manualOffset = (prompterData.beatTimes && prompterData.beatTimes.length > 0) ? (gridOffsetTime - prompterData.beatTimes[0]) : 0;
+      const manualOffset = (prompterData.beatTimes && prompterData.beatTimes.length > 0) ? manualGridOffset : 0;
+      
+      let downbeatIndex = 0;
+      if (prompterData.beatTimes && prompterData.beatTimes.length > 0) {
+         downbeatIndex = prompterData.beatTimes.findIndex((t: number) => Math.abs(t - (prompterData.firstBeatOffset || 0)) < 0.05);
+         if (downbeatIndex === -1) downbeatIndex = 0;
+      }
       
       let beatCount = 0;
       for (const time of shiftedBeatTimes) {
         const adjustedTime = time + manualOffset;
         if (adjustedTime >= globalOffset) {
-          const isHigh = beatCount % beatsPerMeasure === 0;
+          const measureBeat = (beatCount - downbeatIndex) % beatsPerMeasure;
+          const normalizedMeasureBeat = ((measureBeat % beatsPerMeasure) + beatsPerMeasure) % beatsPerMeasure;
+          const isHigh = normalizedMeasureBeat === 0;
           const buffer = isHigh ? clickHighBufferRef.current : clickLowBufferRef.current;
           
           if (buffer && audioContext.current) {
@@ -422,8 +429,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
          }
       }
 
-      const gridOffsetTime = (prompterData.firstBeatOffset || 0) + manualGridOffset;
-      const manualOffset = (prompterData.beatTimes && prompterData.beatTimes.length > 0) ? (gridOffsetTime - prompterData.beatTimes[0]) : 0;
+      const manualOffset = (prompterData.beatTimes && prompterData.beatTimes.length > 0) ? manualGridOffset : 0;
 
       prompterData.sections.forEach((section: any) => {
          const secTime = section.time + preRollDuration;
@@ -633,14 +639,21 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
               }
            }
 
-           const gridOffsetTime = (prompterData.firstBeatOffset || 0) + manualGridOffset;
-           const manualOffset = (prompterData.beatTimes && prompterData.beatTimes.length > 0) ? (gridOffsetTime - prompterData.beatTimes[0]) : 0;
+           const manualOffset = (prompterData.beatTimes && prompterData.beatTimes.length > 0) ? manualGridOffset : 0;
+           
+           let downbeatIndex = 0;
+           if (prompterData.beatTimes && prompterData.beatTimes.length > 0) {
+              downbeatIndex = prompterData.beatTimes.findIndex((t: number) => Math.abs(t - (prompterData.firstBeatOffset || 0)) < 0.05);
+              if (downbeatIndex === -1) downbeatIndex = 0;
+           }
            
            let beatCount = 0;
            for (const time of shiftedBeatTimes) {
              const adjustedTime = time + manualOffset;
              if (adjustedTime >= 0 && adjustedTime < lengthSeconds) {
-               const isHigh = beatCount % beatsPerMeasure === 0;
+               const measureBeat = (beatCount - downbeatIndex) % beatsPerMeasure;
+               const normalizedMeasureBeat = ((measureBeat % beatsPerMeasure) + beatsPerMeasure) % beatsPerMeasure;
+               const isHigh = normalizedMeasureBeat === 0;
                const buffer = isHigh ? clickHighBufferRef.current : clickLowBufferRef.current;
                
                if (buffer) {
@@ -680,8 +693,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
                   if (adjusted >= 0) bTimes.push(adjusted);
               }
            }
-           const gridOffsetTime = (prompterData.firstBeatOffset || 0) + manualGridOffset;
-           const manualOffset = (prompterData.beatTimes && prompterData.beatTimes.length > 0) ? (gridOffsetTime - prompterData.beatTimes[0]) : 0;
+           const manualOffset = (prompterData.beatTimes && prompterData.beatTimes.length > 0) ? manualGridOffset : 0;
 
            prompterData.sections.forEach((section: any) => {
               const secTime = section.time + preRollDuration;

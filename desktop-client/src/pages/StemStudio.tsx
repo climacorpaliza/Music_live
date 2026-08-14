@@ -116,9 +116,14 @@ export default function StemStudio() {
              });
            }
 
+           const beatTimes: number[] = rawOutput.beats || [];
+           const downbeats: number[] = rawOutput.downbeats || [];
+           const firstDownbeatTime = downbeats.length > 0 ? downbeats[0] : (beatTimes.length > 0 ? beatTimes[0] : 0);
+
            beatsPrompterData = {
              bpm: rawOutput.bpm,
-             beatTimes: rawOutput.beats || [],
+             beatTimes: beatTimes,
+             firstBeatOffset: firstDownbeatTime,
              sections: newSections
            };
            
@@ -148,6 +153,7 @@ export default function StemStudio() {
         ...currentPrompterData,
         bpm: beatsPrompterData.bpm,
         beatTimes: beatsPrompterData.beatTimes,
+        firstBeatOffset: beatsPrompterData.firstBeatOffset,
         sections: beatsPrompterData.sections.length > 0 ? beatsPrompterData.sections : currentPrompterData.sections
       };
 
