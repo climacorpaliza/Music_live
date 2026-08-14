@@ -79,7 +79,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // 1. Descartar basura generada antes del inicio real de la canción
       const validChords = finalChords.filter(c => c.time >= firstBeatTime - 0.2);
       
-      const alignedChords = [];
+      const alignedChords: { time: number; chord: string }[] = [];
       let currentActiveChord = null;
 
       for (const chord of validChords) {
