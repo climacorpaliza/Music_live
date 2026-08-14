@@ -10,7 +10,7 @@ const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 export default function LivePrompter() {
   const [songs, setSongs] = useState<any[]>([]);
   const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
-  const { loadStems, play, pause, seekTo, isPlaying, currentTime, routingMode, setRoutingMode, stems, setStems, loadProgress, totalDuration, preRollDuration, exportLiveMix, exportGhostBounce, getBuffer } = useAudioEngine([]);
+  const { loadStems, play, pause, seekTo, isPlaying, currentTime, routingMode, setRoutingMode, stems, setStems, loadProgress, totalDuration, preRollDuration, exportLiveMix, exportGhostBounce } = useAudioEngine([]);
   
   const [prompterData, setPrompterData] = useState<{bpm?: number, timeSignature?: string, firstBeatOffset?: number, beatTimes?: number[], chords: any[], sections: any[], lastAiDetection?: string}>({ chords: [], sections: [] });
   
