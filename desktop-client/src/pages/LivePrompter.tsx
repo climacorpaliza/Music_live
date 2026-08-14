@@ -136,7 +136,7 @@ export default function LivePrompter() {
       const baseOffset = prompterData.firstBeatOffset !== undefined 
         ? prompterData.firstBeatOffset 
         : (prompterData.chords && prompterData.chords.length > 0 ? prompterData.chords[0].time : 0);
-      await loadStems(prompterData.bpm, baseOffset + manualGridOffset, prompterData.timeSignature, prompterData.beatTimes, prompterData);
+      await loadStems(prompterData.bpm || 120, baseOffset + manualGridOffset, prompterData.timeSignature, prompterData.beatTimes, prompterData);
       setAudioLoaded(true);
     } catch (error: any) {
       setLoadError("Error descargando las pistas. Asegúrate de tener conexión y permisos CORS habilitados en el Bucket.");
@@ -182,7 +182,7 @@ export default function LivePrompter() {
       const baseOffset = prompterData.firstBeatOffset !== undefined 
         ? prompterData.firstBeatOffset 
         : (prompterData.chords && prompterData.chords.length > 0 ? prompterData.chords[0].time : 0);
-      await loadStems(prompterData.bpm, baseOffset + newOffset, prompterData.timeSignature, prompterData.beatTimes, prompterData);
+      await loadStems(prompterData.bpm || 120, baseOffset + newOffset, prompterData.timeSignature, prompterData.beatTimes, prompterData);
       
       if (isPlaying) {
         const current = currentTime;
@@ -207,7 +207,7 @@ export default function LivePrompter() {
     setManualGridOffset(newOffset);
     
     // Regenerate metronome
-    await loadStems(prompterData.bpm, currentTime, prompterData.timeSignature, prompterData.beatTimes, prompterData);
+    await loadStems(prompterData.bpm || 120, currentTime, prompterData.timeSignature, prompterData.beatTimes, prompterData);
     
     const current = currentTime;
     pause();
@@ -289,7 +289,7 @@ export default function LivePrompter() {
         ? prompterData.firstBeatOffset 
         : (prompterData.chords && prompterData.chords.length > 0 ? prompterData.chords[0].time : 0);
       
-      await loadStems(prompterData.bpm, baseOffset + manualGridOffset, prompterData.timeSignature, beatTimes, { ...prompterData, beatTimes });
+      await loadStems(prompterData.bpm || 120, baseOffset + manualGridOffset, prompterData.timeSignature, beatTimes, { ...prompterData, beatTimes });
       
       alert(`Análisis Local completado. Se detectaron ${beatTimes.length} beats en milisegundos.`);
       
@@ -603,7 +603,7 @@ export default function LivePrompter() {
          const baseOffset = prompterData.firstBeatOffset !== undefined 
             ? prompterData.firstBeatOffset 
             : (prompterData.chords && prompterData.chords.length > 0 ? prompterData.chords[0].time : 0);
-         loadStems(prompterData.bpm, baseOffset + manualGridOffset, prompterData.timeSignature, prompterData.beatTimes, prompterData);
+         loadStems(prompterData.bpm || 120, baseOffset + manualGridOffset, prompterData.timeSignature, prompterData.beatTimes, prompterData);
       }
     } catch (e: any) {
       console.error(e);

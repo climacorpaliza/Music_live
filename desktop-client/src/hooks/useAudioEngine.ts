@@ -210,7 +210,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
 
     // Guardar para uso interno
     prompterDataRef.current = prompterData;
-    manualGridOffsetRef.current = gridOffsetTime - (prompterData?.firstBeatOffset || 0);
+    manualGridOffsetRef.current = _gridOffsetTime - (prompterData?.firstBeatOffset || 0);
 
     // Resetear el reloj visual al inicio del Pre-Roll
     setCurrentTime(-preRollDuration);
