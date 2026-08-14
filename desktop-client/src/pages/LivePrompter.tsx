@@ -3,7 +3,6 @@ import { supabase } from '../lib/supabase';
 import { useAudioEngine, StemTrack } from '../hooks/useAudioEngine';
 import { Prompter } from '../components/Prompter';
 import { Play, Pause, Square, MonitorSpeaker, Mic, Edit3, Save, AlertCircle, Music, Headphones, Activity, Sparkles } from 'lucide-react';
-import { detectBeatsAdaptive, interpolateMissingBeats } from '../utils/beatDetector';
 import '../App.css';
 
 const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
@@ -32,9 +31,6 @@ export default function LivePrompter() {
   
   // Stems as returned from Supabase
   const [dbStems, setDbStems] = useState<any[]>([]);
-  
-  // Live Sync Engine State
-  const [liveTapTimes, setLiveTapTimes] = useState<number[]>([]);
   
   // Error state for audio loading
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -219,336 +215,172 @@ export default function LivePrompter() {
     }, 50);
   };
 
-  const handleLiveTap = async () => {
-    if (!audioLoaded) return;
-    const now = Date.now();
-    const newTaps = [...liveTapTimes, now].filter(time => now - time < 3000);
-    
-    if (newTaps.length >= 4) { // Requiere 4 taps para estar seguro
-        const intervals = [];
-        for (let i = 1; i < newTaps.length; i++) {
-          intervals.push(newTaps[i] - newTaps[i-1]);
-        }
-        const avgInterval = intervals.reduce((a, b) => a + b) / intervals.length;
-        const newBpm = Math.round(60000 / avgInterval);
-        
-        // Actualizar el estado temporalmente en RAM
-        setPrompterData(prevData => ({ ...prevData, bpm: newBpm, beatTimes: [] }));
-        
-        // Regenerar audio con nuevo BPM al instante
-        const baseOffset = prompterData.firstBeatOffset !== undefined 
-          ? prompterData.firstBeatOffset 
-          : (prompterData.chords && prompterData.chords.length > 0 ? prompterData.chords[0].time : 0);
-        loadStems(newBpm, baseOffset + manualGridOffset, prompterData.timeSignature, [], prompterData).then(() => {
-          if (isPlaying) {
-             const current = currentTime;
-             pause();
-             setTimeout(() => { seekTo(current); play(); }, 50);
-          }
-        });
-        
-        setLiveTapTimes([]);
-    } else {
-        setLiveTapTimes(newTaps);
-    }
-  };
-
-  const handleAdaptiveTempo = async () => {
-    if (!prompterData.bpm) {
-      alert("Primero define un BPM aproximado manualmente o con Live Tap.");
-      return;
-    }
-    
-    // 1. Preferir pista Maestra (Master)
-    let targetStem = stems.find((s: any) => s.metadata?.is_master === true);
-    // 2. Fallback a batería o click
-    if (!targetStem) targetStem = stems.find(s => s.name.toLowerCase().includes('drum') || s.name.toLowerCase().includes('bateria'));
-    if (!targetStem) targetStem = stems.find(s => s.name.toLowerCase().includes('click') || s.name.toLowerCase().includes('metronomo'));
-    // 3. Último recurso
-    if (!targetStem) targetStem = stems[0];
-    
-    if (!targetStem) {
-      alert("No se encontró ninguna pista para analizar.");
-      return;
-    }
-
-    const buffer = getBuffer(targetStem.id);
-    if (!buffer) {
-      alert("El audio aún no se ha cargado en memoria.");
-      return;
-    }
-
-    setIsAnalyzingTempo(true);
-    try {
-      let beatTimes = await detectBeatsAdaptive(buffer, prompterData.bpm);
-      
-      // Interpolate missing beats
-      beatTimes = interpolateMissingBeats(beatTimes);
-      
-      setPrompterData(prev => ({ ...prev, beatTimes }));
-      
-      const baseOffset = prompterData.firstBeatOffset !== undefined 
-        ? prompterData.firstBeatOffset 
-        : (prompterData.chords && prompterData.chords.length > 0 ? prompterData.chords[0].time : 0);
-      
-      await loadStems(prompterData.bpm || 120, baseOffset + manualGridOffset, prompterData.timeSignature, beatTimes, { ...prompterData, beatTimes });
-      
-      alert(`Análisis Local completado. Se detectaron ${beatTimes.length} beats en milisegundos.`);
-      
-    } catch (e: any) {
-      console.error(e);
-      alert('Error en análisis adaptativo local: ' + e.message);
-    } finally {
-      setIsAnalyzingTempo(false);
-    }
-  };
-
-  const handleAdaptiveTempoAI = async () => {
+  const handleAutoAnalyzeSong = async () => {
     if (!selectedSongId) {
       alert("Selecciona una canción primero.");
       return;
     }
     
     setIsAnalyzingTempo(true);
+    setIsDetectingChords(true);
+    setChordDetectionMsg("Paso 1: Iniciando detección de BPM y Downbeat...");
+    
     try {
-      // 1. Iniciar análisis
-      const res = await fetch('/api/ai/beats', {
+      // --- FASE 1: BEATS Y TEMPO ---
+      const beatsRes = await fetch('/api/ai/beats', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ songId: selectedSongId, stems })
       });
+      const beatsData = await beatsRes.json();
+      if (!beatsRes.ok) throw new Error(beatsData.error || 'Error iniciando IA BeatNet');
       
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error iniciando IA BeatNet');
-      
-      const { predictionId } = data;
-      console.log("BeatNet prediction ID:", predictionId);
-      
-      // 2. Polling
-      let isDone = false;
-      let rawOutput = null;
+      let isBeatsDone = false;
+      let rawBeatsOutput = null;
       let attempts = 0;
       
-      while (!isDone && attempts < 300) { // 10 minutes timeout for Sakemin cold boot
+      while (!isBeatsDone && attempts < 300) {
         await new Promise(r => setTimeout(r, 2000));
         attempts++;
-        
         const statusRes = await fetch('/api/ai/beats_status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ predictionId })
+          body: JSON.stringify({ predictionId: beatsData.predictionId })
         });
-        
         const statusData = await statusRes.json();
-        if (!statusRes.ok) throw new Error(statusData.error || 'Error en polling');
+        if (!statusRes.ok) throw new Error(statusData.error || 'Error en polling de beats');
         
         if (statusData.done) {
-          isDone = true;
-          rawOutput = statusData.data;
+          isBeatsDone = true;
+          rawBeatsOutput = statusData.data;
         } else if (statusData.status === 'failed' || statusData.status === 'canceled') {
-          throw new Error('La predicción de IA falló en Replicate.');
+          throw new Error('La predicción de Tempo falló en Replicate.');
+        } else {
+          setChordDetectionMsg(`Paso 1: Detectando ritmo... (Intento ${attempts})`);
         }
       }
       
-      if (!isDone) throw new Error("Timeout: La IA de Replicate está tardando demasiado en inicializar (Cold Boot). Intenta de nuevo.");
+      if (!isBeatsDone) throw new Error("Timeout: La IA de tempo tardó demasiado.");
       
-      // 3. Procesar salida de Sakemin
-      console.log("IA Raw Output:", rawOutput);
-      
-      let actualOutput = rawOutput;
-      
-      // Sakemin devuelve un array con 1 URL apuntando al JSON estructurado
-      if (Array.isArray(actualOutput) && actualOutput.length > 0 && typeof actualOutput[0] === 'string' && actualOutput[0].startsWith('http')) {
-        console.log("Fetching JSON from URL:", actualOutput[0]);
-        const beatFileRes = await fetch(actualOutput[0]);
-        actualOutput = await beatFileRes.json();
-        console.log("Fetched actual output:", actualOutput);
+      if (Array.isArray(rawBeatsOutput) && typeof rawBeatsOutput[0] === 'string' && rawBeatsOutput[0].startsWith('http')) {
+        const beatFileRes = await fetch(rawBeatsOutput[0]);
+        rawBeatsOutput = await beatFileRes.json();
       }
       
-      const beatTimes: number[] = actualOutput.beats || [];
-      const downbeats: number[] = actualOutput.downbeats || [];
-      let firstDownbeatTime: number | null = downbeats.length > 0 ? downbeats[0] : null;
+      let detectedBpm = rawBeatsOutput.bpm || prompterData.bpm || 120;
+      const downbeats: number[] = rawBeatsOutput.downbeats || [];
+      const beatTimes: number[] = rawBeatsOutput.beats || [];
+      const firstDownbeatTime = downbeats.length > 0 ? downbeats[0] : (beatTimes.length > 0 ? beatTimes[0] : 0);
       
-      if (beatTimes.length === 0) {
-         throw new Error("No se detectaron beats en la salida de la IA.");
-      }
-      
-      // Extraer secciones si la canción no tenía
       const newSections = [...(prompterData.sections || [])];
-      if (actualOutput.segments && actualOutput.segments.length > 0 && newSections.length === 0) {
-        actualOutput.segments.forEach((seg: any) => {
-           newSections.push({ name: seg.label.toUpperCase(), time: seg.start });
-        });
+      if (rawBeatsOutput.segments && rawBeatsOutput.segments.length > 0 && newSections.length === 0) {
+        rawBeatsOutput.segments.forEach((seg: any) => newSections.push({ name: seg.label.toUpperCase(), time: seg.start }));
       }
 
-      const baseOffset = firstDownbeatTime !== null 
-        ? firstDownbeatTime 
-        : (prompterData.firstBeatOffset || 0);
-
-      const detectedBpm = actualOutput.bpm || prompterData.bpm;
-
-      setPrompterData(prev => ({ 
-        ...prev, 
-        bpm: detectedBpm,
-        beatTimes: beatTimes,
-        firstBeatOffset: baseOffset,
-        sections: newSections
-      }));
+      // --- FASE 2: GHOST BOUNCE Y ACORDES ---
+      setChordDetectionMsg("Paso 2: Generando mezcla para acordes...");
+      const bounceBlob = await exportGhostBounce((msg) => setChordDetectionMsg(`Paso 2: Mezclando... ${msg}`));
       
-      await loadStems(detectedBpm, baseOffset + manualGridOffset, prompterData.timeSignature, beatTimes, { 
-        ...prompterData, 
-        bpm: detectedBpm,
-        beatTimes: beatTimes,
-        firstBeatOffset: baseOffset,
-        sections: newSections
-      });
-      
-      alert(`Análisis IA PRO MAX completado.\nBPM: ${detectedBpm}\nBeats: ${beatTimes.length}\nSecciones: ${newSections.length}`);
-      
-    } catch (err: any) {
-      console.error(err);
-      alert(err.message);
-    } finally {
-      setIsAnalyzingTempo(false);
-    }
-  };
-
-  const handleHalveTempo = async () => {
-    if (!prompterData.bpm) return;
-    const newBpm = prompterData.bpm / 2;
-    let newBeatTimes = prompterData.beatTimes;
-    if (newBeatTimes && newBeatTimes.length > 0) {
-      newBeatTimes = newBeatTimes.filter((_, i) => i % 2 === 0);
-    }
-    const newData = { ...prompterData, bpm: newBpm, beatTimes: newBeatTimes };
-    setPrompterData(newData);
-    await loadStems(newBpm, (prompterData.firstBeatOffset || 0) + manualGridOffset, prompterData.timeSignature, newBeatTimes, newData);
-    
-    // Save to DB
-    if (selectedSongId) {
-      await supabase.from('songs').update({ prompter_data: newData }).eq('id', selectedSongId);
-    }
-  };
-
-  const handleDoubleTempo = async () => {
-    if (!prompterData.bpm) return;
-    const newBpm = prompterData.bpm * 2;
-    let newBeatTimes = prompterData.beatTimes;
-    if (newBeatTimes && newBeatTimes.length > 0) {
-      const doubled = [];
-      for (let i = 0; i < newBeatTimes.length - 1; i++) {
-        doubled.push(newBeatTimes[i]);
-        doubled.push((newBeatTimes[i] + newBeatTimes[i+1]) / 2);
-      }
-      doubled.push(newBeatTimes[newBeatTimes.length - 1]);
-      newBeatTimes = doubled;
-    }
-    const newData = { ...prompterData, bpm: newBpm, beatTimes: newBeatTimes };
-    setPrompterData(newData);
-    await loadStems(newBpm, (prompterData.firstBeatOffset || 0) + manualGridOffset, prompterData.timeSignature, newBeatTimes, newData);
-    
-    // Save to DB
-    if (selectedSongId) {
-      await supabase.from('songs').update({ prompter_data: newData }).eq('id', selectedSongId);
-    }
-  };
-
-  const handleClearBeatGrid = async () => {
-    // Esto borra el "Warped Grid" de la IA y fuerza al sistema a usar la grilla matemática pura
-    if (!prompterData.bpm) return;
-    const newData = { ...prompterData, beatTimes: [] };
-    setPrompterData(newData);
-    await loadStems(prompterData.bpm, (prompterData.firstBeatOffset || 0) + manualGridOffset, prompterData.timeSignature, [], newData);
-    
-    // Save to DB
-    if (selectedSongId) {
-      await supabase.from('songs').update({ prompter_data: newData }).eq('id', selectedSongId);
-    }
-    alert("Grilla IA descartada. El metrónomo ahora es 100% matemático y rígido.");
-  };
-
-  const handleDetectChordsAI = async () => {
-    if (!selectedSongId) {
-      alert("Selecciona una canción primero.");
-      return;
-    }
-    setIsDetectingChords(true);
-    setChordDetectionMsg("Paso 1: Generando Ghost Bounce (volumen 100%)...");
-    try {
-      const bounceBlob = await exportGhostBounce((msg) => setChordDetectionMsg(`Paso 1: ${msg}`));
-      
-      setChordDetectionMsg("Paso 2: Subiendo pista a la nube...");
+      setChordDetectionMsg("Paso 3: Subiendo mezcla segura...");
       const fakeBandId = "local-band";
       const bouncePath = `${fakeBandId}/${selectedSongId}/mixes/ghost_${Date.now()}.wav`;
-      
       const { supabase } = await import('../lib/supabase');
       const { error: bounceError } = await supabase.storage.from('audios').upload(bouncePath, bounceBlob, { contentType: 'audio/wav', upsert: true });
       if (bounceError) throw bounceError;
-      
       const bounceUrl = supabase.storage.from('audios').getPublicUrl(bouncePath).data.publicUrl;
       
-      setChordDetectionMsg("Paso 3: Iniciando análisis de Armonía con IA...");
-      const res = await fetch('/api/ai/chords', {
+      setChordDetectionMsg("Paso 4: IA analizando progresión armónica...");
+      const chordsRes = await fetch('/api/ai/chords', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           songId: selectedSongId,
           timeSignature: prompterData.timeSignature || "4/4",
           stems: [{ name: 'Master Ghost Bounce', file_url: bounceUrl, type: 'Instrument', metadata: { is_master: true } }],
-          detectedBpm: prompterData.bpm,
-          firstBeat: prompterData.firstBeatOffset || 0,
-          beatTimes: prompterData.beatTimes || [],
-          sections: prompterData.sections || []
+          detectedBpm,
+          firstBeat: firstDownbeatTime,
+          beatTimes: [], // DEJAMOS BEATTIMES VACÍO PARA FORZAR GRILLA MATEMÁTICA PURA
+          sections: newSections
         })
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error desconocido del servidor IA');
+      const chordsData = await chordsRes.json();
+      if (!chordsRes.ok) throw new Error(chordsData.error || 'Error iniciando IA de acordes');
       
-      const { predictionId, prompterData: pdFromApi } = data;
-      
-      let chordsPollCount = 1;
       let isChordsDone = false;
-
+      let chordsPollCount = 0;
+      
       while (!isChordsDone && chordsPollCount < 300) {
         await new Promise(r => setTimeout(r, 2000));
+        chordsPollCount++;
         const statusRes = await fetch('/api/ai/status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            predictionId,
-            prompterData: pdFromApi, 
-            songId: selectedSongId
-          })
+          body: JSON.stringify({ predictionId: chordsData.predictionId, prompterData: chordsData.prompterData, songId: selectedSongId })
         });
-        
         const statusData = await statusRes.json();
-        if (!statusRes.ok) throw new Error(statusData.error || 'Error en polling acordes');
+        if (!statusRes.ok) throw new Error(statusData.error || 'Error en polling de acordes');
 
         if (statusData.done) {
           isChordsDone = true;
-          setChordDetectionMsg("¡Acordes generados exitosamente!");
           
-          const { data: songData } = await supabase.from('songs').select('prompter_data').eq('id', selectedSongId).single();
-          if (songData?.prompter_data) {
-             setPrompterData(songData.prompter_data);
+          // --- FASE 3: AUDITORÍA Y AUTO-CORRECCIÓN MATEMÁTICA ---
+          setChordDetectionMsg("Paso 5: Calibrando grilla matemáticamente...");
+          
+          const { data: finalSongData } = await supabase.from('songs').select('prompter_data').eq('id', selectedSongId).single();
+          const pData = finalSongData?.prompter_data;
+          
+          if (pData) {
+            // Auditar BPM usando cambios de acordes
+            if (pData.chords && pData.chords.length >= 4) {
+              const intervals = [];
+              for (let i = 1; i < Math.min(10, pData.chords.length); i++) {
+                intervals.push(pData.chords[i].time - pData.chords[i-1].time);
+              }
+              const avgInterval = intervals.reduce((a, b) => a + b) / intervals.length;
+              
+              // Si el BPM detectado es ej. 133, un compás (4 beats) duraría ~1.8 segundos.
+              // Si los acordes cambian cada ~1.8 segundos, significa que cambian cada compás a 133 BPM
+              // o cada 2 beats (medio compás) a 66.5 BPM.
+              // En música lenta, si el BPM > 110 y el intervalo promedio de acordes es mayor a 1.5s, 
+              // casi seguro es un "Double-Time Detection" (detectó el doble del tempo).
+              if (detectedBpm > 110 && avgInterval > 1.5) {
+                detectedBpm = detectedBpm / 2;
+                console.log(`Auto-Correction: Halved BPM to ${detectedBpm} based on avg chord interval of ${avgInterval}s`);
+              }
+            }
+            
+            // Forzar Guardado Definitivo: Grilla Matemática (sin beatTimes IA) y Timestamp
+            const finalPerfectData = {
+              ...pData,
+              bpm: detectedBpm,
+              firstBeatOffset: firstDownbeatTime,
+              beatTimes: [], // ESTO ES LA MAGIA: Forzamos matemática
+              lastAiDetection: new Date().toLocaleString('es-PE')
+            };
+            
+            await supabase.from('songs').update({ prompter_data: finalPerfectData }).eq('id', selectedSongId);
+            setPrompterData(finalPerfectData);
+            await loadStems(detectedBpm, firstDownbeatTime + manualGridOffset, pData.timeSignature, [], finalPerfectData);
           }
+          
+          setChordDetectionMsg("¡Canción analizada y cuadrícula perfecta generada!");
           setTimeout(() => setChordDetectionMsg(null), 5000);
         } else {
           if (statusData.status === 'starting' && chordsPollCount > 10) {
-            setChordDetectionMsg(`Paso 3: IA despertando. Puede tomar 5-10 min... (Intento ${chordsPollCount})`);
+            setChordDetectionMsg(`Paso 4: Servidor IA despertando... (Intento ${chordsPollCount})`);
           } else {
-            setChordDetectionMsg(`Paso 3: IA Procesando... Estado: ${statusData.status} (Intento ${chordsPollCount})`);
+            setChordDetectionMsg(`Paso 4: Analizando armonía... Estado: ${statusData.status}`);
           }
         }
-        chordsPollCount++;
       }
       
-    } catch (error: any) {
-       console.error("Error detecting chords AI:", error);
-       alert(`Falló la detección IA: ${error.message}`);
-       setChordDetectionMsg(null);
+    } catch (err: any) {
+      console.error(err);
+      alert("Error en Auto-Análisis: " + err.message);
+      setChordDetectionMsg(null);
     } finally {
-       setIsDetectingChords(false);
+      setIsAnalyzingTempo(false);
+      setIsDetectingChords(false);
     }
   };
 
@@ -795,60 +627,13 @@ export default function LivePrompter() {
                 SET DOWNBEAT
               </button>
               <button 
-                onClick={handleAdaptiveTempo}
-                disabled={isAnalyzingTempo}
-                className="bg-blue-900/30 hover:bg-blue-900/60 text-blue-400 border border-blue-900/50 px-2 py-1 rounded text-[10px] font-bold transition disabled:opacity-50 flex items-center space-x-1"
-                title="Detectar transientes localmente (Muy rápido)"
+                onClick={handleAutoAnalyzeSong}
+                disabled={isDetectingChords || isAnalyzingTempo}
+                className="w-full mt-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white border border-purple-400 px-4 py-2 rounded text-[12px] font-bold transition disabled:opacity-50 flex items-center justify-center space-x-2 shadow-[0_0_15px_rgba(168,85,247,0.4)]"
+                title="Proceso 100% Automático: Detecta BPM, Acordes y genera una cuadrícula matemática inamovible."
               >
-                <span>{isAnalyzingTempo ? 'ANALIZANDO...' : 'TEMPO LOCAL'}</span>
-              </button>
-              <button 
-                onClick={handleAdaptiveTempoAI}
-                disabled={isAnalyzingTempo}
-                className="bg-purple-900/30 hover:bg-purple-900/60 text-purple-400 border border-purple-900/50 px-2 py-1 rounded text-[10px] font-bold transition disabled:opacity-50 flex items-center space-x-1"
-                title="Usar Inteligencia Artificial para detectar tempo y downbeats exactos (Requiere Internet)"
-              >
-                <Activity size={10} className="text-purple-300" />
-                <span>IA PRO</span>
-              </button>
-              <button 
-                onClick={handleDetectChordsAI}
-                disabled={isDetectingChords}
-                className="bg-pink-900/30 hover:bg-pink-900/60 text-pink-400 border border-pink-900/50 px-2 py-1 rounded text-[10px] font-bold transition disabled:opacity-50 flex items-center space-x-1"
-                title="Detectar acordes usando la mezcla maestra al 100% de volumen"
-              >
-                <Sparkles size={10} className="text-pink-300" />
-                <span>{isDetectingChords ? 'DETECTANDO...' : 'ACORDES IA'}</span>
-              </button>
-              <div className="flex bg-black/40 rounded border border-gray-800">
-                <button 
-                  onClick={handleHalveTempo}
-                  className="px-2 py-1 text-[10px] text-gray-400 hover:text-white hover:bg-white/10 font-bold border-r border-gray-800 transition"
-                  title="Reducir el BPM a la mitad (Ideal para baladas)"
-                >
-                  ÷2
-                </button>
-                <button 
-                  onClick={handleDoubleTempo}
-                  className="px-2 py-1 text-[10px] text-gray-400 hover:text-white hover:bg-white/10 font-bold transition"
-                  title="Duplicar el BPM"
-                >
-                  x2
-                </button>
-              </div>
-              <button 
-                onClick={handleLiveTap} 
-                className="bg-blue-900/30 hover:bg-blue-900/60 text-blue-400 border border-blue-900/50 px-2 py-1 rounded text-[10px] font-bold transition"
-                title="Presiona 4 veces al ritmo de la banda para ajustar el BPM en vivo"
-              >
-                LIVE TAP {liveTapTimes.length > 0 ? `(${liveTapTimes.length})` : ''}
-              </button>
-              <button 
-                onClick={handleClearBeatGrid} 
-                className="bg-red-900/30 hover:bg-red-900/60 text-red-400 border border-red-900/50 px-2 py-1 rounded text-[10px] font-bold transition"
-                title="Forzar al metrónomo a ser matemáticamente perfecto (Borra las fluctuaciones de la IA)"
-              >
-                LIMPIAR GRILLA IA
+                <Sparkles size={14} className="text-white" />
+                <span>{isDetectingChords || isAnalyzingTempo ? '✨ PROCESANDO IA MAGICA...' : '✨ AUTO-ANALIZAR CANCIÓN'}</span>
               </button>
             </div>
           </div>
