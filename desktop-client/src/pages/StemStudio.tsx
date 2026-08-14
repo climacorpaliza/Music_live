@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import StemUploader from '../components/StemUploader';
-import { Music, FolderPlus, Disc3, FileAudio, Loader2, Trash2, Sparkles, RefreshCw } from 'lucide-react';
+import { Music, FolderPlus, Disc3, FileAudio, Loader2, Trash2, Sparkles, CheckCircle, RefreshCw } from 'lucide-react';
 
 const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -11,6 +11,12 @@ export default function StemStudio() {
   const [stems, setStems] = useState<any[]>([]);
   const [loadingSongs, setLoadingSongs] = useState(true);
   const [loadingStems, setLoadingStems] = useState(false);
+
+  // AI Generator state
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [aiSuccessMessage, setAiSuccessMessage] = useState<string | null>(null);
+  const [manualKey, setManualKey] = useState<string>('');
+  const [timeSignature, setTimeSignature] = useState<string>('4/4');
 
   // AI Splitter State
   const [isSplitting, setIsSplitting] = useState(false);
@@ -59,6 +65,113 @@ export default function StemStudio() {
     }
   };
 
+  const handleGenerateChordsAI = async () => {
+    if (!selectedSongId) return;
+    setIsGeneratingAI(true);
+    setAiSuccessMessage(null);
+    
+    try {
+      // ---------------------------------------------------------
+      // PASO 1: DETECCIÓN DE TEMPO Y SECCIONES (SAKEMIN AI)
+      // ---------------------------------------------------------
+      setAiSuccessMessage(`Paso 1/2: Iniciando análisis de Tempo...`);
+
+      const beatsRes = await fetch('/api/ai/beats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ songId: selectedSongId, stems })
+      });
+      const beatsData = await beatsRes.json();
+      if (!beatsRes.ok) throw new Error(beatsData.error || 'Error iniciando Sakemin');
+      
+      const beatsPredictionId = beatsData.predictionId;
+      let isBeatsDone = false;
+      let beatsPrompterData = null;
+      let pollCount = 1;
+
+      while (!isBeatsDone && pollCount < 300) {
+        await new Promise(r => setTimeout(r, 2000));
+        const statusRes = await fetch('/api/ai/beats_status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ predictionId: beatsPredictionId })
+        });
+        const statusData = await statusRes.json();
+        if (!statusRes.ok) throw new Error(statusData.error || 'Error en polling tempo');
+        
+        if (statusData.done) {
+           isBeatsDone = true;
+           
+           let rawOutput = statusData.data;
+           if (Array.isArray(rawOutput) && rawOutput.length > 0 && typeof rawOutput[0] === 'string' && rawOutput[0].startsWith('http')) {
+             console.log("Fetching JSON from URL:", rawOutput[0]);
+             const beatFileRes = await fetch(rawOutput[0]);
+             rawOutput = await beatFileRes.json();
+           }
+           
+           const newSections: any[] = [];
+           if (rawOutput.segments && rawOutput.segments.length > 0) {
+             rawOutput.segments.forEach((seg: any) => {
+                newSections.push({ name: seg.label.toUpperCase(), time: seg.start });
+             });
+           }
+
+           const beatTimes: number[] = rawOutput.beats || [];
+           const downbeats: number[] = rawOutput.downbeats || [];
+           const firstDownbeatTime = downbeats.length > 0 ? downbeats[0] : (beatTimes.length > 0 ? beatTimes[0] : 0);
+
+           beatsPrompterData = {
+             bpm: rawOutput.bpm,
+             beatTimes: beatTimes,
+             firstBeatOffset: firstDownbeatTime,
+             sections: newSections
+           };
+           
+        } else {
+           if (statusData.status === 'starting' && pollCount > 10) {
+             setAiSuccessMessage(`Paso 1/2: IA Tempo despertando (Cold Boot, puede tardar hasta 5-10 min) (Intento ${pollCount})`);
+           } else {
+             setAiSuccessMessage(`Paso 1/2: IA Tempo Procesando... Estado: ${statusData.status} (Intento ${pollCount})`);
+           }
+        }
+        pollCount++;
+      }
+
+      if (!isBeatsDone || !beatsPrompterData) {
+         throw new Error('Timeout esperando el análisis de Tempo');
+      }
+
+      // ---------------------------------------------------------
+      // PASO 2: GUARDAR TEMPO Y GRILLA
+      // ---------------------------------------------------------
+      setAiSuccessMessage(`Tempo detectado. Guardando en la base de datos...`);
+      
+      const { data: songData } = await supabase.from('songs').select('prompter_data').eq('id', selectedSongId).single();
+      const currentPrompterData = songData?.prompter_data || {};
+      
+      const finalPrompterData = {
+        ...currentPrompterData,
+        bpm: beatsPrompterData.bpm,
+        beatTimes: beatsPrompterData.beatTimes,
+        firstBeatOffset: beatsPrompterData.firstBeatOffset,
+        sections: beatsPrompterData.sections.length > 0 ? beatsPrompterData.sections : currentPrompterData.sections,
+        lastAiDetection: new Date().toLocaleString('es-PE')
+      };
+
+      const { error: updateError } = await supabase.from('songs').update({ prompter_data: finalPrompterData }).eq('id', selectedSongId);
+      if (updateError) throw new Error(updateError.message);
+
+      setAiSuccessMessage("¡Tempo y Grilla generados y guardados exitosamente!");
+      fetchSongs();
+      setTimeout(() => setAiSuccessMessage(null), 5000);
+
+    } catch (error: any) {
+      console.error("Error saving AI:", error);
+      alert(`Falló la detección IA: ${error.message}`);
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
 
   const deleteStem = async (stemId: string) => {
     if (!confirm('¿Estás seguro de que quieres eliminar esta pista?')) return;
@@ -290,6 +403,63 @@ export default function StemStudio() {
               </div>
             )}
           </div>
+
+          {/* AI Intelligence Section */}
+          {selectedSongId && (
+            <div className="bg-[#1A1A1A] p-6 rounded-2xl border border-purple-900/50 shadow-xl relative overflow-hidden backdrop-blur-xl">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-purple-600/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+              
+              <h4 className="text-sm font-bold text-gray-200 mb-4 flex items-center">
+                <span className="w-2 h-2 rounded-full bg-purple-500 mr-2 shadow-[0_0_8px_rgba(168,85,247,0.8)]"></span>
+                Inteligencia Artificial (Detección de Tempo y Notas)
+              </h4>
+              
+              <div className="space-y-4 relative z-10">
+                <div className="flex space-x-2">
+                  <div className="flex-1">
+                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1 block">Compás</label>
+                    <select value={timeSignature} onChange={(e) => setTimeSignature(e.target.value)} className="w-full bg-[#111] border border-[#333] rounded px-3 py-2 text-xs text-white focus:border-purple-500 outline-none transition">
+                      <option value="4/4">4/4 (Estándar)</option>
+                      <option value="3/4">3/4 (Vals)</option>
+                      <option value="6/8">6/8 (Balada)</option>
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1 block">Clave (Opcional)</label>
+                    <input type="text" value={manualKey} onChange={(e) => setManualKey(e.target.value)} placeholder="Ej: Bb Major" className="w-full bg-[#111] border border-[#333] rounded px-3 py-2 text-xs text-white focus:border-purple-500 outline-none transition" />
+                  </div>
+                </div>
+                
+                <button 
+                  onClick={handleGenerateChordsAI}
+                  disabled={!selectedSongId || isGeneratingAI || stems.length === 0}
+                  className="w-full bg-purple-600 hover:bg-purple-500 text-white p-3 rounded-xl font-bold text-sm shadow-[0_0_15px_rgba(147,51,234,0.3)] transition flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isGeneratingAI ? <RefreshCw className="animate-spin mr-2" size={18} /> : <Sparkles className="mr-2" size={18} />}
+                  {isGeneratingAI ? "Analizando Tempo..." : "✨ Detectar Tempo y Grilla"}
+                </button>
+                
+                {aiSuccessMessage ? (
+                  <p className="text-xs text-green-400 leading-tight flex items-center bg-green-900/20 p-3 rounded-xl">
+                    <CheckCircle size={16} className="mr-2 shrink-0" />
+                    {aiSuccessMessage}
+                  </p>
+                ) : (
+                  <div>
+                    <p className="text-[10px] text-gray-500 leading-tight italic mb-2">
+                      Al hacer clic, el motor AI detectará automáticamente el BPM y la cuadrícula rítmica, y la guardará para el Live Prompter.
+                    </p>
+                    {songs.find(s => s.id === selectedSongId)?.prompter_data?.lastAiDetection && (
+                      <div className="flex items-center text-xs text-purple-300 bg-purple-900/20 p-2 rounded border border-purple-500/20">
+                        <CheckCircle size={14} className="mr-2" />
+                        Última detección exitosa: {songs.find(s => s.id === selectedSongId)?.prompter_data?.lastAiDetection}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Stems List Section */}
           {selectedSongId && (
