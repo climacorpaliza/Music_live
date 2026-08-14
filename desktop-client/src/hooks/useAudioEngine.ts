@@ -91,7 +91,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
   }, []);
 
   // 2. Cargar Buffers en Memoria
-  const loadStems = async (bpm?: number, gridOffsetTime: number = 0, timeSignature: string = '4/4', _beatTimes: number[] = [], prompterData?: any) => {
+  const loadStems = async (_bpm: number, _gridOffsetTime: number = 0, _timeSignature: string = '4/4', _beatTimes: number[] = [], prompterData?: any) => {
     if (!audioContext.current) return;
     
     // Resume context if suspended (browser auto-play policy)
