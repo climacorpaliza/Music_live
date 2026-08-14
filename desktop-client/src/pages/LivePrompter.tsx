@@ -420,8 +420,14 @@ export default function LivePrompter() {
     if (newBeatTimes && newBeatTimes.length > 0) {
       newBeatTimes = newBeatTimes.filter((_, i) => i % 2 === 0);
     }
-    setPrompterData(prev => ({ ...prev, bpm: newBpm, beatTimes: newBeatTimes }));
-    await loadStems(newBpm, (prompterData.firstBeatOffset || 0) + manualGridOffset, prompterData.timeSignature, newBeatTimes, { ...prompterData, bpm: newBpm, beatTimes: newBeatTimes });
+    const newData = { ...prompterData, bpm: newBpm, beatTimes: newBeatTimes };
+    setPrompterData(newData);
+    await loadStems(newBpm, (prompterData.firstBeatOffset || 0) + manualGridOffset, prompterData.timeSignature, newBeatTimes, newData);
+    
+    // Save to DB
+    if (selectedSongId) {
+      await supabase.from('songs').update({ prompter_data: newData }).eq('id', selectedSongId);
+    }
   };
 
   const handleDoubleTempo = async () => {
@@ -437,8 +443,28 @@ export default function LivePrompter() {
       doubled.push(newBeatTimes[newBeatTimes.length - 1]);
       newBeatTimes = doubled;
     }
-    setPrompterData(prev => ({ ...prev, bpm: newBpm, beatTimes: newBeatTimes }));
-    await loadStems(newBpm, (prompterData.firstBeatOffset || 0) + manualGridOffset, prompterData.timeSignature, newBeatTimes, { ...prompterData, bpm: newBpm, beatTimes: newBeatTimes });
+    const newData = { ...prompterData, bpm: newBpm, beatTimes: newBeatTimes };
+    setPrompterData(newData);
+    await loadStems(newBpm, (prompterData.firstBeatOffset || 0) + manualGridOffset, prompterData.timeSignature, newBeatTimes, newData);
+    
+    // Save to DB
+    if (selectedSongId) {
+      await supabase.from('songs').update({ prompter_data: newData }).eq('id', selectedSongId);
+    }
+  };
+
+  const handleClearBeatGrid = async () => {
+    // Esto borra el "Warped Grid" de la IA y fuerza al sistema a usar la grilla matemática pura
+    if (!prompterData.bpm) return;
+    const newData = { ...prompterData, beatTimes: [] };
+    setPrompterData(newData);
+    await loadStems(prompterData.bpm, (prompterData.firstBeatOffset || 0) + manualGridOffset, prompterData.timeSignature, [], newData);
+    
+    // Save to DB
+    if (selectedSongId) {
+      await supabase.from('songs').update({ prompter_data: newData }).eq('id', selectedSongId);
+    }
+    alert("Grilla IA descartada. El metrónomo ahora es 100% matemático y rígido.");
   };
 
   const handleDetectChordsAI = async () => {
@@ -816,6 +842,13 @@ export default function LivePrompter() {
                 title="Presiona 4 veces al ritmo de la banda para ajustar el BPM en vivo"
               >
                 LIVE TAP {liveTapTimes.length > 0 ? `(${liveTapTimes.length})` : ''}
+              </button>
+              <button 
+                onClick={handleClearBeatGrid} 
+                className="bg-red-900/30 hover:bg-red-900/60 text-red-400 border border-red-900/50 px-2 py-1 rounded text-[10px] font-bold transition"
+                title="Forzar al metrónomo a ser matemáticamente perfecto (Borra las fluctuaciones de la IA)"
+              >
+                LIMPIAR GRILLA IA
               </button>
             </div>
           </div>
