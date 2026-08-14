@@ -13,7 +13,7 @@ export default function LivePrompter() {
   const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
   const { loadStems, play, pause, seekTo, isPlaying, currentTime, routingMode, setRoutingMode, stems, setStems, loadProgress, totalDuration, preRollDuration, exportLiveMix, getBuffer } = useAudioEngine([]);
   
-  const [prompterData, setPrompterData] = useState<{bpm?: number, timeSignature?: string, firstBeatOffset?: number, beatTimes?: number[], chords: any[], sections: any[]}>({ chords: [], sections: [] });
+  const [prompterData, setPrompterData] = useState<{bpm?: number, timeSignature?: string, firstBeatOffset?: number, beatTimes?: number[], chords: any[], sections: any[], lastAiDetection?: string}>({ chords: [], sections: [] });
   
   const [isAnalyzingTempo, setIsAnalyzingTempo] = useState(false);
   
@@ -636,16 +636,24 @@ export default function LivePrompter() {
       <header className="h-20 bg-[#111] border-b border-[#222] flex items-center px-6 justify-between shrink-0">
         <div className="flex items-center space-x-4">
           <div className="bg-yellow-500 text-black font-black p-2 rounded">TLH</div>
-          <select 
-            className="bg-[#222] border border-[#333] text-white px-4 py-2 rounded outline-none"
-            value={selectedSongId || ''}
-            onChange={(e) => setSelectedSongId(e.target.value)}
-          >
-            <option value="">Selecciona una Canción...</option>
-            {songs.map(song => (
-              <option key={song.id} value={song.id}>{song.title}</option>
-            ))}
-          </select>
+          <div className="flex flex-col">
+            <select 
+              className="bg-[#222] border border-[#333] text-white px-4 py-2 rounded outline-none"
+              value={selectedSongId || ''}
+              onChange={(e) => setSelectedSongId(e.target.value)}
+            >
+              <option value="">Selecciona una Canción...</option>
+              {songs.map(song => (
+                <option key={song.id} value={song.id}>{song.title}</option>
+              ))}
+            </select>
+            {prompterData?.lastAiDetection && (
+              <span className="text-[10px] text-purple-400 mt-1 flex items-center">
+                <Activity size={10} className="mr-1" />
+                IA: {prompterData.lastAiDetection}
+              </span>
+            )}
+          </div>
 
           {selectedSongId && !audioLoaded && (
             <button onClick={handleLoadAudio} className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded font-bold transition">
