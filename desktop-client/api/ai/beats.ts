@@ -54,6 +54,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    if (!prediction) {
+      throw new Error('No se pudo crear la predicción de beats');
+    }
+
     return res.status(200).json({ 
       success: true, 
       predictionId: prediction.id,

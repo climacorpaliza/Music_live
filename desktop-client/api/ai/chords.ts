@@ -1,11 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Replicate from 'replicate';
-import { createClient } from '@supabase/supabase-js';
-
-// Configurar Supabase
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Configurar Replicate con token de entorno o fallback
 const replicateToken = process.env.REPLICATE_API_TOKENstems || process.env.VITE_REPLICATE_API_TOKENstems || process.env.REPLICATE_API_TOKEN || process.env.VITE_REPLICATE_API_TOKEN;
@@ -20,7 +14,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { songId, manualKey, timeSignature, stems, detectedBpm, firstBeat, beatTimes, sections } = req.body;
+    const { songId, timeSignature, stems, detectedBpm, firstBeat, beatTimes, sections } = req.body;
     
     if (!songId) return res.status(400).json({ error: 'Falta songId' });
     if (!stems || stems.length === 0) return res.status(404).json({ error: 'No stems' });
@@ -59,6 +53,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           throw err;
         }
       }
+    }
+
+    if (!prediction) {
+      throw new Error('No se pudo crear la predicción de acordes');
     }
 
     const finalSections = (sections && sections.length > 0) 
