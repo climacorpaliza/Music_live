@@ -137,63 +137,26 @@ export default function StemStudio() {
       }
 
       // ---------------------------------------------------------
-      // PASO 2: DETECCIÓN DE ACORDES Y CUANTIZACIÓN MAGNÉTICA
+      // PASO 2: GUARDAR TEMPO Y GRILLA
       // ---------------------------------------------------------
-      setAiSuccessMessage(`Paso 2/2: Tempo detectado. Iniciando análisis de Armonía...`);
-
-      const res = await fetch('/api/ai/chords', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          songId: selectedSongId,
-          manualKey: manualKey || undefined,
-          timeSignature,
-          stems,
-          detectedBpm: beatsPrompterData.bpm,
-          firstBeat: beatsPrompterData.beatTimes?.[0] || 0,
-          beatTimes: beatsPrompterData.beatTimes || [],
-          sections: beatsPrompterData.sections || []
-        })
-      });
+      setAiSuccessMessage(`Tempo detectado. Guardando en la base de datos...`);
       
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error desconocido del servidor IA');
+      const { data: songData } = await supabase.from('songs').select('prompter_data').eq('id', selectedSongId).single();
+      const currentPrompterData = songData?.prompter_data || {};
+      
+      const finalPrompterData = {
+        ...currentPrompterData,
+        bpm: beatsPrompterData.bpm,
+        beatTimes: beatsPrompterData.beatTimes,
+        sections: beatsPrompterData.sections.length > 0 ? beatsPrompterData.sections : currentPrompterData.sections
+      };
 
-      const { predictionId, prompterData } = data; // prompterData enviado por la API chords
+      const { error: updateError } = await supabase.from('songs').update({ prompter_data: finalPrompterData }).eq('id', selectedSongId);
+      if (updateError) throw new Error(updateError.message);
 
-      // 3. POLLING DE ACORDES
-      let chordsPollCount = 1;
-      let isChordsDone = false;
-
-      while (!isChordsDone && chordsPollCount < 300) {
-        await new Promise(r => setTimeout(r, 2000));
-        const statusRes = await fetch('/api/ai/status', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            predictionId,
-            prompterData, // Se le pasa el prompterData actual para que la IA en el backend haga la cuantización a la grilla
-            songId: selectedSongId
-          })
-        });
-        
-        const statusData = await statusRes.json();
-        if (!statusRes.ok) throw new Error(statusData.error || 'Error en polling acordes');
-
-        if (statusData.done) {
-          isChordsDone = true;
-          setAiSuccessMessage("¡Tempo y Acordes generados y guardados exitosamente!");
-          fetchSongs();
-          setTimeout(() => setAiSuccessMessage(null), 5000);
-        } else {
-          if (statusData.status === 'starting' && chordsPollCount > 10) {
-            setAiSuccessMessage(`Paso 2/2: IA Acordes despertando (Cold Boot). Puede tomar de 5 a 10 min... (Intento ${chordsPollCount})`);
-          } else {
-            setAiSuccessMessage(`Paso 2/2: IA Acordes Procesando... Estado: ${statusData.status} (Intento ${chordsPollCount})`);
-          }
-        }
-        chordsPollCount++;
-      }
+      setAiSuccessMessage("¡Tempo y Grilla generados y guardados exitosamente!");
+      fetchSongs();
+      setTimeout(() => setAiSuccessMessage(null), 5000);
 
     } catch (error: any) {
       console.error("Error saving AI:", error);
@@ -466,7 +429,7 @@ export default function StemStudio() {
                   className="w-full bg-purple-600 hover:bg-purple-500 text-white p-3 rounded-xl font-bold text-sm shadow-[0_0_15px_rgba(147,51,234,0.3)] transition flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isGeneratingAI ? <RefreshCw className="animate-spin mr-2" size={18} /> : <Sparkles className="mr-2" size={18} />}
-                  {isGeneratingAI ? "Analizando Armonía..." : "✨ Detectar Tempo y Notas con IA"}
+                  {isGeneratingAI ? "Analizando Tempo..." : "✨ Detectar Tempo y Grilla"}
                 </button>
                 
                 {aiSuccessMessage ? (
@@ -477,7 +440,7 @@ export default function StemStudio() {
                 ) : (
                   <div>
                     <p className="text-[10px] text-gray-500 leading-tight italic mb-2">
-                      Al hacer clic, el motor AI detectará automáticamente el BPM, la clave y el mapa de acordes de los Stems y los guardará para el Live Prompter.
+                      Al hacer clic, el motor AI detectará automáticamente el BPM y la cuadrícula rítmica, y la guardará para el Live Prompter.
                     </p>
                     {songs.find(s => s.id === selectedSongId)?.prompter_data?.lastAiDetection && (
                       <div className="flex items-center text-xs text-purple-300 bg-purple-900/20 p-2 rounded border border-purple-500/20">

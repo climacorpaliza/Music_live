@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAudioEngine, StemTrack } from '../hooks/useAudioEngine';
 import { Prompter } from '../components/Prompter';
-import { Play, Pause, Square, MonitorSpeaker, Mic, Edit3, Save, AlertCircle, Music, Headphones, Activity } from 'lucide-react';
+import { Play, Pause, Square, MonitorSpeaker, Mic, Edit3, Save, AlertCircle, Music, Headphones, Activity, Sparkles } from 'lucide-react';
 import { detectBeatsAdaptive, interpolateMissingBeats } from '../utils/beatDetector';
 import '../App.css';
 
@@ -11,11 +11,13 @@ const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 export default function LivePrompter() {
   const [songs, setSongs] = useState<any[]>([]);
   const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
-  const { loadStems, play, pause, seekTo, isPlaying, currentTime, routingMode, setRoutingMode, stems, setStems, loadProgress, totalDuration, preRollDuration, exportLiveMix, getBuffer } = useAudioEngine([]);
+  const { loadStems, play, pause, seekTo, isPlaying, currentTime, routingMode, setRoutingMode, stems, setStems, loadProgress, totalDuration, preRollDuration, exportLiveMix, exportGhostBounce, getBuffer } = useAudioEngine([]);
   
   const [prompterData, setPrompterData] = useState<{bpm?: number, timeSignature?: string, firstBeatOffset?: number, beatTimes?: number[], chords: any[], sections: any[], lastAiDetection?: string}>({ chords: [], sections: [] });
   
   const [isAnalyzingTempo, setIsAnalyzingTempo] = useState(false);
+  const [isDetectingChords, setIsDetectingChords] = useState(false);
+  const [chordDetectionMsg, setChordDetectionMsg] = useState<string | null>(null);
   
   // Ref del tiempo para el editor en vivo (evitar stale closures y re-binds)
   const currentTimeRef = useRef(0);
@@ -439,6 +441,91 @@ export default function LivePrompter() {
     await loadStems(newBpm, (prompterData.firstBeatOffset || 0) + manualGridOffset, prompterData.timeSignature, newBeatTimes, { ...prompterData, bpm: newBpm, beatTimes: newBeatTimes });
   };
 
+  const handleDetectChordsAI = async () => {
+    if (!selectedSongId) {
+      alert("Selecciona una canción primero.");
+      return;
+    }
+    setIsDetectingChords(true);
+    setChordDetectionMsg("Paso 1: Generando Ghost Bounce (volumen 100%)...");
+    try {
+      const bounceBlob = await exportGhostBounce((msg) => setChordDetectionMsg(`Paso 1: ${msg}`));
+      
+      setChordDetectionMsg("Paso 2: Subiendo pista a la nube...");
+      const fakeBandId = "local-band";
+      const bouncePath = `${fakeBandId}/${selectedSongId}/mixes/ghost_${Date.now()}.wav`;
+      
+      const { supabase } = await import('../lib/supabase');
+      const { error: bounceError } = await supabase.storage.from('audios').upload(bouncePath, bounceBlob, { contentType: 'audio/wav', upsert: true });
+      if (bounceError) throw bounceError;
+      
+      const bounceUrl = supabase.storage.from('audios').getPublicUrl(bouncePath).data.publicUrl;
+      
+      setChordDetectionMsg("Paso 3: Iniciando análisis de Armonía con IA...");
+      const res = await fetch('/api/ai/chords', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          songId: selectedSongId,
+          timeSignature: prompterData.timeSignature || "4/4",
+          stems: [{ name: 'Master Ghost Bounce', file_url: bounceUrl, type: 'Instrument', metadata: { is_master: true } }],
+          detectedBpm: prompterData.bpm,
+          firstBeat: prompterData.firstBeatOffset || 0,
+          beatTimes: prompterData.beatTimes || [],
+          sections: prompterData.sections || []
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error desconocido del servidor IA');
+      
+      const { predictionId, prompterData: pdFromApi } = data;
+      
+      let chordsPollCount = 1;
+      let isChordsDone = false;
+
+      while (!isChordsDone && chordsPollCount < 300) {
+        await new Promise(r => setTimeout(r, 2000));
+        const statusRes = await fetch('/api/ai/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            predictionId,
+            prompterData: pdFromApi, 
+            songId: selectedSongId
+          })
+        });
+        
+        const statusData = await statusRes.json();
+        if (!statusRes.ok) throw new Error(statusData.error || 'Error en polling acordes');
+
+        if (statusData.done) {
+          isChordsDone = true;
+          setChordDetectionMsg("¡Acordes generados exitosamente!");
+          
+          const { data: songData } = await supabase.from('songs').select('prompter_data').eq('id', selectedSongId).single();
+          if (songData?.prompter_data) {
+             setPrompterData(songData.prompter_data);
+          }
+          setTimeout(() => setChordDetectionMsg(null), 5000);
+        } else {
+          if (statusData.status === 'starting' && chordsPollCount > 10) {
+            setChordDetectionMsg(`Paso 3: IA despertando. Puede tomar 5-10 min... (Intento ${chordsPollCount})`);
+          } else {
+            setChordDetectionMsg(`Paso 3: IA Procesando... Estado: ${statusData.status} (Intento ${chordsPollCount})`);
+          }
+        }
+        chordsPollCount++;
+      }
+      
+    } catch (error: any) {
+       console.error("Error detecting chords AI:", error);
+       alert(`Falló la detección IA: ${error.message}`);
+       setChordDetectionMsg(null);
+    } finally {
+       setIsDetectingChords(false);
+    }
+  };
+
   const handleVolumeChange = (stemId: string, newVolume: number) => {
     setStems((prev: any[]) => prev.map((s: any) => s.id === stemId ? { ...s, volume: newVolume } : s));
   };
@@ -698,6 +785,15 @@ export default function LivePrompter() {
                 <Activity size={10} className="text-purple-300" />
                 <span>IA PRO</span>
               </button>
+              <button 
+                onClick={handleDetectChordsAI}
+                disabled={isDetectingChords}
+                className="bg-pink-900/30 hover:bg-pink-900/60 text-pink-400 border border-pink-900/50 px-2 py-1 rounded text-[10px] font-bold transition disabled:opacity-50 flex items-center space-x-1"
+                title="Detectar acordes usando la mezcla maestra al 100% de volumen"
+              >
+                <Sparkles size={10} className="text-pink-300" />
+                <span>{isDetectingChords ? 'DETECTANDO...' : 'ACORDES IA'}</span>
+              </button>
               <div className="flex bg-black/40 rounded border border-gray-800">
                 <button 
                   onClick={handleHalveTempo}
@@ -816,6 +912,20 @@ export default function LivePrompter() {
               ></div>
             </div>
             <p className="mt-2 text-sm font-bold text-yellow-500">{loadProgress.loaded} / {loadProgress.total}</p>
+          </div>
+        )}
+
+        {/* Chord Detection Overlay */}
+        {chordDetectionMsg && (
+          <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center backdrop-blur-sm">
+            <div className="text-pink-500 mb-4 animate-pulse">
+              <Sparkles size={48} />
+            </div>
+            <h2 className="text-2xl font-bold mb-2 text-pink-400">Analizando Acordes (IA)</h2>
+            <p className="text-pink-200 text-lg">{chordDetectionMsg}</p>
+            <div className="w-96 bg-[#222] rounded-full h-2 mt-6 overflow-hidden border border-pink-900/50">
+              <div className="bg-pink-500 h-full w-full animate-pulse"></div>
+            </div>
           </div>
         )}
 

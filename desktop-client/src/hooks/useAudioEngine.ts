@@ -817,6 +817,47 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     return buffers.current.get(stemId);
   };
 
+  const exportGhostBounce = async (onProgress: (msg: string) => void): Promise<Blob> => {
+    if (!audioContext.current) throw new Error("AudioContext not initialized");
+    const sampleRate = audioContext.current.sampleRate;
+    const lengthSeconds = totalDuration + preRollDurationRef.current + 5; 
+    const lengthSamples = Math.ceil(lengthSeconds * sampleRate);
+
+    onProgress('Preparando Ghost Bounce...');
+    const offlineCtx = new (window.OfflineAudioContext || (window as any).webkitOfflineAudioContext)(2, lengthSamples, sampleRate);
+    
+    const preRollDuration = preRollDurationRef.current;
+
+    stems.forEach(stem => {
+      const isMusic = stem.type === 'Instrument';
+      if (!isMusic) return; 
+
+      const buffer = buffers.current.get(stem.id);
+      if (!buffer) return;
+
+      const source = offlineCtx.createBufferSource();
+      source.buffer = buffer;
+      
+      const gain = offlineCtx.createGain();
+      gain.gain.value = 1.0; 
+
+      const panner = offlineCtx.createStereoPanner();
+      panner.pan.value = 0; 
+
+      source.connect(gain);
+      gain.connect(panner);
+      panner.connect(offlineCtx.destination);
+      
+      source.start(preRollDuration);
+    });
+
+    onProgress('Renderizando Ghost Bounce...');
+    const renderedBuffer = await offlineCtx.startRendering();
+    
+    onProgress('Codificando WAV...');
+    return audioBufferToWavBlob(renderedBuffer);
+  };
+
   return {
     loadStems,
     play,
@@ -833,6 +874,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     totalDuration,
     preRollDuration: preRollDurationRef.current,
     exportLiveMix,
+    exportGhostBounce,
     getBuffer
   };
 };
