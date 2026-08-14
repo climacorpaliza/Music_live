@@ -183,6 +183,7 @@ export default function StemStudio() {
         if (statusData.done) {
           isChordsDone = true;
           setAiSuccessMessage("¡Tempo y Acordes generados y guardados exitosamente!");
+          fetchSongs();
           setTimeout(() => setAiSuccessMessage(null), 5000);
         } else {
           if (statusData.status === 'starting' && chordsPollCount > 10) {
@@ -474,9 +475,17 @@ export default function StemStudio() {
                     {aiSuccessMessage}
                   </p>
                 ) : (
-                  <p className="text-[10px] text-gray-500 leading-tight italic">
-                    Al hacer clic, el motor AI detectará automáticamente el BPM, la clave y el mapa de acordes de los Stems y los guardará para el Live Prompter.
-                  </p>
+                  <div>
+                    <p className="text-[10px] text-gray-500 leading-tight italic mb-2">
+                      Al hacer clic, el motor AI detectará automáticamente el BPM, la clave y el mapa de acordes de los Stems y los guardará para el Live Prompter.
+                    </p>
+                    {songs.find(s => s.id === selectedSongId)?.prompter_data?.lastAiDetection && (
+                      <div className="flex items-center text-xs text-purple-300 bg-purple-900/20 p-2 rounded border border-purple-500/20">
+                        <CheckCircle size={14} className="mr-2" />
+                        Última detección exitosa: {songs.find(s => s.id === selectedSongId)?.prompter_data?.lastAiDetection}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

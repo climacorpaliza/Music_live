@@ -159,6 +159,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     prompterData.bpm = Number(Number(finalBpm).toFixed(2));
     prompterData.chords = quantizedChords;
+    prompterData.lastAiDetection = new Date().toLocaleString();
 
     console.log('[IA-Status] PrompterData Final ensamblado. Guardando en Supabase...');
 
