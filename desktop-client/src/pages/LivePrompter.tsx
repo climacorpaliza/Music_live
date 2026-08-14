@@ -207,7 +207,7 @@ export default function LivePrompter() {
       const res = await fetch('/api/ai/beats', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ songId: selectedSongId, stems })
+        body: JSON.stringify({ songId: selectedSongId, stems: dbStems })
       });
       
       const data = await res.json();
@@ -728,8 +728,17 @@ export default function LivePrompter() {
               className="bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 px-3 py-1.5 rounded-md text-xs font-bold transition disabled:opacity-50 flex items-center space-x-1.5 mr-1"
               title="Detectar tempo y downbeats exactos (Requiere Internet)"
             >
-              <Activity size={12} />
-              <span>IA PRO</span>
+              {isAnalyzingTempo ? (
+                <>
+                  <Activity size={12} className="animate-pulse" />
+                  <span>ANALIZANDO...</span>
+                </>
+              ) : (
+                <>
+                  <Activity size={12} />
+                  <span>IA PRO</span>
+                </>
+              )}
             </button>
             <button 
               onClick={handleDetectChordsAI}
