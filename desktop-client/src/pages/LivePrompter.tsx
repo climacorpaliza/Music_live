@@ -3,7 +3,6 @@ import { supabase } from '../lib/supabase';
 import { useAudioEngine, StemTrack } from '../hooks/useAudioEngine';
 import { Prompter } from '../components/Prompter';
 import { Play, Pause, Square, MonitorSpeaker, Mic, Edit3, Save, AlertCircle, Music, Headphones, Activity, Sparkles } from 'lucide-react';
-import { detectBeatsAdaptive, interpolateMissingBeats } from '../utils/beatDetector';
 import '../App.css';
 
 const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
@@ -11,7 +10,7 @@ const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 export default function LivePrompter() {
   const [songs, setSongs] = useState<any[]>([]);
   const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
-  const { loadStems, play, pause, seekTo, isPlaying, currentTime, routingMode, setRoutingMode, stems, setStems, loadProgress, totalDuration, preRollDuration, exportLiveMix, exportGhostBounce, getBuffer } = useAudioEngine([]);
+  const { loadStems, play, pause, seekTo, isPlaying, currentTime, routingMode, setRoutingMode, stems, setStems, loadProgress, totalDuration, preRollDuration, exportLiveMix, exportGhostBounce } = useAudioEngine([]);
   
   const [prompterData, setPrompterData] = useState<{bpm?: number, timeSignature?: string, firstBeatOffset?: number, beatTimes?: number[], chords: any[], sections: any[], lastAiDetection?: string}>({ chords: [], sections: [] });
   
@@ -32,9 +31,6 @@ export default function LivePrompter() {
   
   // Stems as returned from Supabase
   const [dbStems, setDbStems] = useState<any[]>([]);
-  
-  // Live Sync Engine State
-  const [liveTapTimes, setLiveTapTimes] = useState<number[]>([]);
   
   // Error state for audio loading
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -197,111 +193,7 @@ export default function LivePrompter() {
     }
   };
 
-  const handleSetDownbeat = async () => {
-    if (!audioLoaded || !isPlaying) return;
-    const baseOffset = prompterData.firstBeatOffset !== undefined 
-      ? prompterData.firstBeatOffset 
-      : (prompterData.chords && prompterData.chords.length > 0 ? prompterData.chords[0].time : 0);
-    // The difference between currentTime and baseOffset becomes the new manualGridOffset
-    // Actually we want the current time to perfectly align with a beat line.
-    // The easiest way: set manualGridOffset so that (baseOffset + manualGridOffset) === currentTime
-    const newOffset = currentTime - baseOffset;
-    setManualGridOffset(newOffset);
-    
-    // Regenerate metronome
-    await loadStems(prompterData.bpm || 120, currentTime, prompterData.timeSignature, prompterData.beatTimes, prompterData);
-    
-    const current = currentTime;
-    pause();
-    setTimeout(() => {
-      seekTo(current);
-      play();
-    }, 50);
-  };
 
-  const handleLiveTap = async () => {
-    if (!audioLoaded) return;
-    const now = Date.now();
-    const newTaps = [...liveTapTimes, now].filter(time => now - time < 3000);
-    
-    if (newTaps.length >= 4) { // Requiere 4 taps para estar seguro
-        const intervals = [];
-        for (let i = 1; i < newTaps.length; i++) {
-          intervals.push(newTaps[i] - newTaps[i-1]);
-        }
-        const avgInterval = intervals.reduce((a, b) => a + b) / intervals.length;
-        const newBpm = Math.round(60000 / avgInterval);
-        
-        // Actualizar el estado temporalmente en RAM
-        setPrompterData(prevData => ({ ...prevData, bpm: newBpm, beatTimes: [] }));
-        
-        // Regenerar audio con nuevo BPM al instante
-        const baseOffset = prompterData.firstBeatOffset !== undefined 
-          ? prompterData.firstBeatOffset 
-          : (prompterData.chords && prompterData.chords.length > 0 ? prompterData.chords[0].time : 0);
-        loadStems(newBpm, baseOffset + manualGridOffset, prompterData.timeSignature, [], prompterData).then(() => {
-          if (isPlaying) {
-             const current = currentTime;
-             pause();
-             setTimeout(() => { seekTo(current); play(); }, 50);
-          }
-        });
-        
-        setLiveTapTimes([]);
-    } else {
-        setLiveTapTimes(newTaps);
-    }
-  };
-
-  const handleAdaptiveTempo = async () => {
-    if (!prompterData.bpm) {
-      alert("Primero define un BPM aproximado manualmente o con Live Tap.");
-      return;
-    }
-    
-    // 1. Preferir pista Maestra (Master)
-    let targetStem = stems.find((s: any) => s.metadata?.is_master === true);
-    // 2. Fallback a batería o click
-    if (!targetStem) targetStem = stems.find(s => s.name.toLowerCase().includes('drum') || s.name.toLowerCase().includes('bateria'));
-    if (!targetStem) targetStem = stems.find(s => s.name.toLowerCase().includes('click') || s.name.toLowerCase().includes('metronomo'));
-    // 3. Último recurso
-    if (!targetStem) targetStem = stems[0];
-    
-    if (!targetStem) {
-      alert("No se encontró ninguna pista para analizar.");
-      return;
-    }
-
-    const buffer = getBuffer(targetStem.id);
-    if (!buffer) {
-      alert("El audio aún no se ha cargado en memoria.");
-      return;
-    }
-
-    setIsAnalyzingTempo(true);
-    try {
-      let beatTimes = await detectBeatsAdaptive(buffer, prompterData.bpm);
-      
-      // Interpolate missing beats
-      beatTimes = interpolateMissingBeats(beatTimes);
-      
-      setPrompterData(prev => ({ ...prev, beatTimes }));
-      
-      const baseOffset = prompterData.firstBeatOffset !== undefined 
-        ? prompterData.firstBeatOffset 
-        : (prompterData.chords && prompterData.chords.length > 0 ? prompterData.chords[0].time : 0);
-      
-      await loadStems(prompterData.bpm || 120, baseOffset + manualGridOffset, prompterData.timeSignature, beatTimes, { ...prompterData, beatTimes });
-      
-      alert(`Análisis Local completado. Se detectaron ${beatTimes.length} beats en milisegundos.`);
-      
-    } catch (e: any) {
-      console.error(e);
-      alert('Error en análisis adaptativo local: ' + e.message);
-    } finally {
-      setIsAnalyzingTempo(false);
-    }
-  };
 
   const handleAdaptiveTempoAI = async () => {
     if (!selectedSongId) {
@@ -747,11 +639,13 @@ export default function LivePrompter() {
       
       {/* HEADER / TRANSPORT */}
       <header className="h-20 bg-[#111] border-b border-[#222] flex items-center px-6 justify-between shrink-0">
-        <div className="flex items-center space-x-4">
-          <div className="bg-yellow-500 text-black font-black p-2 rounded">TLH</div>
-          <div className="flex flex-col">
+        
+        {/* Left: Song Selector & Loader */}
+        <div className="flex items-center space-x-4 w-[30%] min-w-[320px]">
+          <div className="bg-gradient-to-br from-yellow-400 to-yellow-600 text-black font-black p-2 rounded shadow-lg">TLH</div>
+          <div className="flex flex-col flex-1">
             <select 
-              className="bg-[#222] border border-[#333] text-white px-4 py-2 rounded outline-none"
+              className="bg-[#222] border border-[#333] text-white px-3 py-1.5 rounded text-sm outline-none w-full"
               value={selectedSongId || ''}
               onChange={(e) => setSelectedSongId(e.target.value)}
             >
@@ -769,104 +663,43 @@ export default function LivePrompter() {
           </div>
 
           {selectedSongId && !audioLoaded && (
-            <button onClick={handleLoadAudio} className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded font-bold transition">
-              Cargar Pistas a RAM
+            <button onClick={handleLoadAudio} className="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded text-sm font-bold transition shadow-lg whitespace-nowrap">
+              Cargar a RAM
             </button>
           )}
-
-          {/* Grid Nudge Controls */}
-          <div className="flex items-center space-x-1 bg-[#1A1A1A] p-1.5 rounded border border-[#333] ml-2">
-            <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mr-2">Grid Nudge</span>
-            <button onClick={() => handleNudge(-0.01)} className="bg-[#222] hover:bg-[#333] px-2 py-1 rounded text-xs text-gray-400 font-mono">-10</button>
-            <button onClick={() => handleNudge(0.01)} className="bg-[#222] hover:bg-[#333] px-2 py-1 rounded text-xs text-gray-400 font-mono">+10</button>
-            <span className="text-xs text-yellow-500 font-mono w-10 text-center">{(manualGridOffset * 1000).toFixed(0)}</span>
-          </div>
-
-          {/* Live Sync Engine */}
-          <div className="flex items-center space-x-1 bg-[#1A1A1A] p-1.5 rounded border border-[#333] ml-2">
-            <span className="text-[9px] text-red-500 font-bold uppercase tracking-wider mr-2 animate-pulse">Live Sync</span>
-            <div className="flex space-x-1">
-              <button 
-                onClick={handleSetDownbeat} 
-                disabled={!isPlaying}
-                className="bg-orange-500/20 hover:bg-orange-500/40 text-orange-400 border border-orange-500/30 px-2 py-1 rounded text-[10px] font-bold disabled:opacity-30 transition"
-                title="Presiona justo en el golpe fuerte del bombo para alinear la grilla instantáneamente"
-              >
-                SET DOWNBEAT
-              </button>
-              <button 
-                onClick={handleAdaptiveTempo}
-                disabled={isAnalyzingTempo}
-                className="bg-blue-900/30 hover:bg-blue-900/60 text-blue-400 border border-blue-900/50 px-2 py-1 rounded text-[10px] font-bold transition disabled:opacity-50 flex items-center space-x-1"
-                title="Detectar transientes localmente (Muy rápido)"
-              >
-                <span>{isAnalyzingTempo ? 'ANALIZANDO...' : 'TEMPO LOCAL'}</span>
-              </button>
-              <button 
-                onClick={handleAdaptiveTempoAI}
-                disabled={isAnalyzingTempo}
-                className="bg-purple-900/30 hover:bg-purple-900/60 text-purple-400 border border-purple-900/50 px-2 py-1 rounded text-[10px] font-bold transition disabled:opacity-50 flex items-center space-x-1"
-                title="Usar Inteligencia Artificial para detectar tempo y downbeats exactos (Requiere Internet)"
-              >
-                <Activity size={10} className="text-purple-300" />
-                <span>IA PRO</span>
-              </button>
-              <button 
-                onClick={handleDetectChordsAI}
-                disabled={isDetectingChords}
-                className="bg-pink-900/30 hover:bg-pink-900/60 text-pink-400 border border-pink-900/50 px-2 py-1 rounded text-[10px] font-bold transition disabled:opacity-50 flex items-center space-x-1"
-                title="Detectar acordes usando la mezcla maestra al 100% de volumen"
-              >
-                <Sparkles size={10} className="text-pink-300" />
-                <span>{isDetectingChords ? 'DETECTANDO...' : 'ACORDES IA'}</span>
-              </button>
-              <div className="flex bg-black/40 rounded border border-gray-800">
-                <button 
-                  onClick={handleHalveTempo}
-                  className="px-2 py-1 text-[10px] text-gray-400 hover:text-white hover:bg-white/10 font-bold border-r border-gray-800 transition"
-                  title="Reducir el BPM a la mitad (Ideal para baladas)"
-                >
-                  ÷2
-                </button>
-                <button 
-                  onClick={handleDoubleTempo}
-                  className="px-2 py-1 text-[10px] text-gray-400 hover:text-white hover:bg-white/10 font-bold transition"
-                  title="Duplicar el BPM"
-                >
-                  x2
-                </button>
-              </div>
-              <button 
-                onClick={handleLiveTap} 
-                className="bg-blue-900/30 hover:bg-blue-900/60 text-blue-400 border border-blue-900/50 px-2 py-1 rounded text-[10px] font-bold transition"
-                title="Presiona 4 veces al ritmo de la banda para ajustar el BPM en vivo"
-              >
-                LIVE TAP {liveTapTimes.length > 0 ? `(${liveTapTimes.length})` : ''}
-              </button>
-              <button 
-                onClick={handleClearBeatGrid} 
-                className="bg-red-900/30 hover:bg-red-900/60 text-red-400 border border-red-900/50 px-2 py-1 rounded text-[10px] font-bold transition"
-                title="Forzar al metrónomo a ser matemáticamente perfecto (Borra las fluctuaciones de la IA)"
-              >
-                LIMPIAR GRILLA IA
-              </button>
-            </div>
-          </div>
         </div>
 
-        {/* Transport Controls */}
-        <div className="flex flex-col items-center flex-1 max-w-xl px-8">
-          <div className="flex items-baseline space-x-2 mb-1">
-            <span className="text-3xl font-mono text-yellow-500 tracking-wider">
-              {formatTime(currentTime)}
-            </span>
-            <span className="text-sm font-mono text-gray-500">
-              / {formatTime(totalDuration).substring(0, 5)}
-            </span>
+        {/* Center: Transport Controls (Ableton/Logic Style) */}
+        <div className="flex flex-col items-center flex-1 px-8">
+          <div className="flex items-center space-x-4 mb-2">
+            {/* Play/Stop Buttons */}
+            <div className="flex space-x-1 bg-black p-1 rounded-lg border border-[#333] shadow-inner">
+              <button 
+                onClick={() => { pause(); seekTo(-(preRollDuration || 0)); }} 
+                className="bg-[#222] hover:bg-[#333] w-10 h-10 flex items-center justify-center rounded transition text-gray-400"
+                title="Stop & Reset"
+              >
+                <Square fill="currentColor" size={16} />
+              </button>
+              <button 
+                onClick={isPlaying ? pause : play} 
+                disabled={!audioLoaded || loadError !== null}
+                className={`${isPlaying ? 'bg-yellow-500 text-black shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'bg-[#222] hover:bg-[#333] text-green-500'} w-12 h-10 flex items-center justify-center rounded transition disabled:opacity-50 disabled:bg-[#111]`}
+              >
+                {isPlaying ? <Pause fill="currentColor" size={20} /> : <Play fill="currentColor" size={20} />}
+              </button>
+            </div>
+
+            {/* Time Display */}
+            <div className="bg-black border border-[#333] px-4 py-1.5 rounded-lg flex items-baseline space-x-2 shadow-inner min-w-[150px] justify-center">
+              <span className="text-2xl font-mono text-yellow-500 tracking-wider">
+                {formatTime(currentTime)}
+              </span>
+            </div>
           </div>
           
           {/* TIMELINE SCRUBBER */}
-          <div className="w-full flex items-center space-x-3 mb-2">
+          <div className="w-full flex items-center space-x-3 max-w-xl">
             <input 
               type="range" 
               min={-(preRollDuration || 0)} 
@@ -875,7 +708,7 @@ export default function LivePrompter() {
               value={currentTime}
               onChange={(e) => seekTo(parseFloat(e.target.value))}
               disabled={!audioLoaded}
-              className="flex-1 h-1.5 bg-[#222] rounded-lg appearance-none cursor-pointer disabled:opacity-50"
+              className="flex-1 h-2 bg-[#222] rounded-full appearance-none cursor-pointer disabled:opacity-50"
               style={{
                 background: audioLoaded 
                   ? `linear-gradient(to right, #eab308 ${((currentTime + (preRollDuration || 0)) / (totalDuration + (preRollDuration || 0))) * 100}%, #222 ${((currentTime + (preRollDuration || 0)) / (totalDuration + (preRollDuration || 0))) * 100}%)`
@@ -883,37 +716,76 @@ export default function LivePrompter() {
               }}
             />
           </div>
-
-          <div className="flex space-x-2">
-            <button 
-              onClick={() => { pause(); seekTo(-(preRollDuration || 0)); }} // Stop and reset
-              className="bg-[#222] hover:bg-[#333] p-2 rounded transition text-gray-400"
-            >
-              <Square fill="currentColor" size={16} />
-            </button>
-            <button 
-              onClick={isPlaying ? pause : play} 
-              disabled={!audioLoaded || loadError !== null}
-              className={`${isPlaying ? 'bg-yellow-500 text-black shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'bg-[#222] hover:bg-[#333] text-green-500'} px-6 py-2 rounded transition disabled:opacity-50 disabled:bg-[#111]`}
-            >
-              {isPlaying ? <Pause fill="currentColor" size={20} /> : <Play fill="currentColor" size={20} />}
-            </button>
-          </div>
         </div>
 
-        {/* Routing Mode */}
-        <div className="flex items-center space-x-3 bg-[#1A1A1A] p-2 rounded border border-[#333]">
-          <MonitorSpeaker size={20} className="text-gray-400" />
-          <div className="flex flex-col">
-            <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Modo de Ruteo</span>
-            <select 
-              className="bg-transparent text-sm font-semibold outline-none text-white"
-              value={routingMode}
-              onChange={(e) => setRoutingMode(e.target.value as 'StereoSplit' | 'MultiChannel')}
+        {/* Right: AI Tools & Settings */}
+        <div className="flex flex-col items-end space-y-2">
+          {/* AI Tools Group */}
+          <div className="flex items-center bg-[#1A1A1A] rounded-lg border border-[#333] p-1 shadow-lg">
+            <button 
+              onClick={handleAdaptiveTempoAI}
+              disabled={isAnalyzingTempo}
+              className="bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 px-3 py-1.5 rounded-md text-xs font-bold transition disabled:opacity-50 flex items-center space-x-1.5 mr-1"
+              title="Detectar tempo y downbeats exactos (Requiere Internet)"
             >
-              <option value="StereoSplit">Stereo Split (L:Click/Cues R:Pistas)</option>
-              <option value="MultiChannel">Multi-Canal (Interfaz USB)</option>
-            </select>
+              <Activity size={12} />
+              <span>IA PRO</span>
+            </button>
+            <button 
+              onClick={handleDetectChordsAI}
+              disabled={isDetectingChords}
+              className="bg-pink-600/20 hover:bg-pink-600/40 text-pink-400 px-3 py-1.5 rounded-md text-xs font-bold transition disabled:opacity-50 flex items-center space-x-1.5 mr-2"
+              title="Detectar acordes"
+            >
+              <Sparkles size={12} />
+              <span>{isDetectingChords ? '...' : 'ACORDES'}</span>
+            </button>
+
+            <div className="w-px h-6 bg-[#333] mx-1"></div>
+
+            <button 
+              onClick={handleHalveTempo}
+              className="px-2 py-1.5 text-xs text-gray-400 hover:text-white hover:bg-white/10 font-bold transition"
+              title="Reducir el BPM a la mitad (Baladas)"
+            >
+              ÷2
+            </button>
+            <button 
+              onClick={handleDoubleTempo}
+              className="px-2 py-1.5 text-xs text-gray-400 hover:text-white hover:bg-white/10 font-bold transition mr-1"
+              title="Duplicar el BPM"
+            >
+              x2
+            </button>
+            <button 
+              onClick={handleClearBeatGrid} 
+              className="bg-red-900/40 hover:bg-red-600 hover:text-white text-red-400 px-3 py-1.5 rounded-md text-xs font-bold transition ml-1"
+              title="Forzar al metrónomo a ser matemáticamente perfecto"
+            >
+              LIMPIAR GRILLA
+            </button>
+          </div>
+
+          {/* Grid Nudge & Routing */}
+          <div className="flex items-center space-x-3">
+            <div className="flex items-center bg-[#1A1A1A] p-1 rounded border border-[#333]">
+              <span className="text-[9px] text-gray-500 font-bold uppercase mr-1.5 px-1">Nudge</span>
+              <button onClick={() => handleNudge(-0.01)} className="bg-[#222] hover:bg-[#333] px-2 py-0.5 rounded text-[10px] text-gray-400 font-mono">-</button>
+              <span className="text-[10px] text-yellow-500 font-mono w-6 text-center">{(manualGridOffset * 1000).toFixed(0)}</span>
+              <button onClick={() => handleNudge(0.01)} className="bg-[#222] hover:bg-[#333] px-2 py-0.5 rounded text-[10px] text-gray-400 font-mono">+</button>
+            </div>
+            
+            <div className="flex items-center bg-[#1A1A1A] px-2 py-1 rounded border border-[#333]">
+              <MonitorSpeaker size={12} className="text-gray-400 mr-2" />
+              <select 
+                className="bg-transparent text-[10px] font-semibold outline-none text-gray-300 uppercase tracking-wide cursor-pointer"
+                value={routingMode}
+                onChange={(e) => setRoutingMode(e.target.value as 'StereoSplit' | 'MultiChannel')}
+              >
+                <option value="StereoSplit">Stereo Split</option>
+                <option value="MultiChannel">Multi-Canal</option>
+              </select>
+            </div>
           </div>
         </div>
       </header>
@@ -963,83 +835,81 @@ export default function LivePrompter() {
         )}
 
         {/* MIXER RACK */}
-        <div className="w-[45%] min-w-[500px] flex flex-col overflow-y-auto p-4 space-y-2 bg-[#0A0A0A]">
+        <div className="w-[28%] min-w-[280px] max-w-[340px] flex flex-col overflow-y-auto p-2 space-y-1.5 bg-[#0A0A0A] custom-scrollbar z-10 shadow-xl border-r border-[#1a1a1a]">
           {stems.map((stem) => {
             const nameLower = stem.name.toLowerCase();
-            let icon = <Music size={16} />;
+            let icon = <Music size={12} />;
             let trackColor = 'bg-gray-500';
             
             if (nameLower.includes('drum') || nameLower.includes('bater') || nameLower.includes('perc')) {
-               icon = <Activity size={16} />;
+               icon = <Activity size={12} />;
                trackColor = 'bg-red-500';
             } else if (nameLower.includes('vocal') || nameLower.includes('voz') || nameLower.includes('mic')) {
-               icon = <Mic size={16} />;
+               icon = <Mic size={12} />;
                trackColor = 'bg-cyan-400';
             } else if (nameLower.includes('bass') || nameLower.includes('bajo')) {
-               icon = <Music size={16} />;
+               icon = <Music size={12} />;
                trackColor = 'bg-purple-500';
             } else if (nameLower.includes('guit')) {
-               icon = <Music size={16} />;
+               icon = <Music size={12} />;
                trackColor = 'bg-orange-400';
             } else if (nameLower.includes('key') || nameLower.includes('piano') || nameLower.includes('synth')) {
-               icon = <Music size={16} />;
+               icon = <Music size={12} />;
                trackColor = 'bg-pink-500';
             } else if (stem.type === 'Click') {
-               icon = <Headphones size={16} />;
+               icon = <Headphones size={12} />;
                trackColor = 'bg-yellow-500';
             } else if (stem.type === 'Cues') {
-               icon = <Mic size={16} />;
+               icon = <Mic size={12} />;
                trackColor = 'bg-blue-500';
             }
 
             return (
-              <div key={stem.id} className="w-full flex items-center bg-[#111] border border-[#222] rounded-lg p-3 overflow-hidden shrink-0 hover:bg-[#151515] transition">
-                <div className="w-[280px] shrink-0 flex items-center space-x-3 pr-4 border-r border-[#333] mr-4">
-                  <div className={`p-1.5 rounded-md ${trackColor} bg-opacity-20 text-white flex items-center justify-center shrink-0`}>
+              <div key={stem.id} className="w-full flex items-center bg-[#111] border border-[#222] rounded-md p-1.5 overflow-hidden shrink-0 hover:bg-[#151515] transition">
+                
+                {/* Icon & Name */}
+                <div className="w-[120px] shrink-0 flex items-center space-x-2 pr-2 border-r border-[#333] mr-2">
+                  <div className={`p-1 rounded-md ${trackColor} bg-opacity-20 text-white flex items-center justify-center shrink-0`}>
                     <div style={{ color: trackColor.replace('bg-', '') }}>{icon}</div>
                   </div>
-                  <div className="text-sm font-bold truncate text-gray-200 tracking-wide" title={stem.name}>{stem.name}</div>
+                  <div className="text-[10px] font-bold truncate text-gray-300 tracking-wide" title={stem.name}>{stem.name}</div>
                 </div>
 
-                <div className="flex space-x-2 shrink-0 w-16 mr-4">
-                  <button onClick={() => toggleMute(stem.id)} className={`w-7 h-7 flex items-center justify-center rounded text-[11px] font-black transition ${stem.muted ? 'bg-red-600 text-white' : 'bg-[#222] text-gray-500 hover:bg-[#333]'}`}>M</button>
-                  <button onClick={() => toggleSolo(stem.id)} className={`w-7 h-7 flex items-center justify-center rounded text-[11px] font-black transition ${stem.solo ? 'bg-yellow-500 text-black shadow-[0_0_10px_rgba(234,179,8,0.5)]' : 'bg-[#222] text-gray-500 hover:bg-[#333]'}`}>S</button>
+                {/* M/S Buttons */}
+                <div className="flex flex-col space-y-1 shrink-0 w-5 mr-2">
+                  <button onClick={() => toggleMute(stem.id)} className={`w-5 h-4 flex items-center justify-center rounded text-[8px] font-black transition ${stem.muted ? 'bg-red-600 text-white' : 'bg-[#222] text-gray-500 hover:bg-[#333]'}`}>M</button>
+                  <button onClick={() => toggleSolo(stem.id)} className={`w-5 h-4 flex items-center justify-center rounded text-[8px] font-black transition ${stem.solo ? 'bg-yellow-500 text-black shadow-[0_0_10px_rgba(234,179,8,0.5)]' : 'bg-[#222] text-gray-500 hover:bg-[#333]'}`}>S</button>
                 </div>
 
-                <div className="flex-1 flex flex-col justify-center px-4 space-y-2">
+                {/* Sliders */}
+                <div className="flex-1 flex flex-col justify-center pr-2 space-y-1.5">
                   <div className="flex items-center relative group">
-                    <span className="text-[9px] text-gray-500 mr-2 w-4">VOL</span>
+                    <span className="text-[7px] text-gray-500 font-bold mr-1.5 w-2">V</span>
                     <input 
                       type="range" 
                       min="0" max="1" step="0.01" 
                       value={stem.volume}
                       onChange={(e) => handleVolumeChange(stem.id, parseFloat(e.target.value))}
-                      className="w-full appearance-none bg-transparent cursor-pointer h-1.5 rounded-full"
+                      className="w-full appearance-none bg-transparent cursor-pointer h-[4px] rounded-full"
                       style={{
                         boxShadow: 'inset 0 0 5px rgba(0,0,0,1)',
                         background: `linear-gradient(90deg, #3b82f6 ${stem.volume * 100}%, #111 ${stem.volume * 100}%)`
                       }}
                     />
-                    <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition text-[10px] bg-black text-white px-2 py-1 rounded pointer-events-none">
-                      {Math.round(stem.volume * 100)}%
-                    </div>
                   </div>
                   <div className="flex items-center relative group">
-                    <span className="text-[9px] text-gray-500 mr-2 w-4">PAN</span>
+                    <span className="text-[7px] text-gray-500 font-bold mr-1.5 w-2">P</span>
                     <input 
                       type="range" 
                       min="-1" max="1" step="0.01" 
                       value={stem.pan}
                       onChange={(e) => handlePanChange(stem.id, parseFloat(e.target.value))}
-                      className="w-full appearance-none bg-transparent cursor-pointer h-1.5 rounded-full"
+                      className="w-full appearance-none bg-transparent cursor-pointer h-[4px] rounded-full"
                       style={{
                         boxShadow: 'inset 0 0 5px rgba(0,0,0,1)',
                         background: `linear-gradient(90deg, #111 ${((stem.pan + 1) / 2) * 100}%, #a855f7 ${((stem.pan + 1) / 2) * 100}%)`
                       }}
                     />
-                    <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition text-[10px] bg-black text-white px-2 py-1 rounded pointer-events-none z-10">
-                      {stem.pan < 0 ? 'L' : stem.pan > 0 ? 'R' : 'C'} {Math.round(Math.abs(stem.pan) * 100)}
-                    </div>
                   </div>
                 </div>
               </div>
