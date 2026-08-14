@@ -411,8 +411,8 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       
       if (prompterData.beatTimes && prompterData.beatTimes.length > 0) {
          
-         for (let i = beatsPerMeasure; i > 0; i--) bTimes.push(firstSongBeatTime - (i * beatInterval));
-         bTimes = [...bTimes, ...prompterData.beatTimes.map((t: number) => t + preRollDuration)];
+         
+         bTimes = [...prompterData.beatTimes.map((t: number) => t + preRollDuration)];
       } else {
          const maxTime = preRollDuration + (totalDuration > 0 ? totalDuration : 600);
          const startOffset = (prompterData.firstBeatOffset || 0) + manualGridOffset;
@@ -671,8 +671,8 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
            let bTimes: number[] = [];
            if (prompterData.beatTimes && prompterData.beatTimes.length > 0) {
               
-              for (let i = beatsPerMeasure; i > 0; i--) bTimes.push(firstSongBeatTime - (i * beatInterval));
-              bTimes = [...bTimes, ...prompterData.beatTimes.map((t: number) => t + preRollDuration)];
+              
+              bTimes = [...prompterData.beatTimes.map((t: number) => t + preRollDuration)];
            } else {
               const startOffset = (prompterData.firstBeatOffset || 0) + manualGridOffset;
               for (let t = preRollDuration; t <= lengthSeconds; t += beatInterval) {
