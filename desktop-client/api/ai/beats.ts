@@ -28,16 +28,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log(`[IA-Beats] Iniciando Replicate Async... Stem: ${selectedStem.name}`);
 
-    // Call Sakemin All-In-One model
-    const prediction = await replicate.predictions.create({
-      version: "001b4137be6ac67bdc28cb5cffacf128b874f530258d033de23121e785cb7290", 
-      input: {
-        music_input: selectedStem.file_url || selectedStem.url,
-        include_embeddings: false,
-        include_activations: false,
-        model: "harmonix-all"
+    // Call Sakemin All-In-One model with retry logic for 502/503 errors
+    let prediction;
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        prediction = await replicate.predictions.create({
+          version: "001b4137be6ac67bdc28cb5cffacf128b874f530258d033de23121e785cb7290", 
+          input: {
+            music_input: selectedStem.file_url || selectedStem.url,
+            include_embeddings: false,
+            include_activations: false,
+            model: "harmonix-all"
+          }
+        });
+        break; // Success
+      } catch (err: any) {
+        if (err.message && err.message.includes('502') && retries > 1) {
+          console.warn(`[IA-Beats] Replicate 502 error. Retrying in 3 seconds... (${retries - 1} retries left)`);
+          await new Promise(res => setTimeout(res, 3000));
+          retries--;
+        } else {
+          throw err;
+        }
       }
-    });
+    }
 
     return res.status(200).json({ 
       success: true, 

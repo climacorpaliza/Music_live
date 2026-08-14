@@ -39,12 +39,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log(`[IA] Enviando ${chordStem.name} a Replicate TriadMusic (Acordes)`);
 
-    const prediction = await replicate.predictions.create({
-      version: 'be95be0303fd42000c413aec595922499f8b946d65416f31fb0034c2daf81f19',
-      input: {
-        audio: chordStem.file_url
+    let prediction;
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        prediction = await replicate.predictions.create({
+          version: 'be95be0303fd42000c413aec595922499f8b946d65416f31fb0034c2daf81f19',
+          input: {
+            audio: chordStem.file_url
+          }
+        });
+        break;
+      } catch (err: any) {
+        if (err.message && err.message.includes('502') && retries > 1) {
+          console.warn(`[IA] Replicate 502 error. Retrying in 3 seconds... (${retries - 1} retries left)`);
+          await new Promise(res => setTimeout(res, 3000));
+          retries--;
+        } else {
+          throw err;
+        }
       }
-    });
+    }
 
     const finalSections = (sections && sections.length > 0) 
       ? sections 
