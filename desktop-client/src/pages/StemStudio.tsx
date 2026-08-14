@@ -154,7 +154,8 @@ export default function StemStudio() {
         bpm: beatsPrompterData.bpm,
         beatTimes: beatsPrompterData.beatTimes,
         firstBeatOffset: beatsPrompterData.firstBeatOffset,
-        sections: beatsPrompterData.sections.length > 0 ? beatsPrompterData.sections : currentPrompterData.sections
+        sections: beatsPrompterData.sections.length > 0 ? beatsPrompterData.sections : currentPrompterData.sections,
+        lastAiDetection: new Date().toLocaleString('es-PE')
       };
 
       const { error: updateError } = await supabase.from('songs').update({ prompter_data: finalPrompterData }).eq('id', selectedSongId);
