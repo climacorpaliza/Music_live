@@ -164,7 +164,7 @@ export default function StemUploader({ songId, bandId, onUploadComplete }: StemU
       console.error('Error uploading stem:', error);
       setUploadStatus('error');
       if (error.message?.includes('Tier Limit Reached')) {
-        setErrorMessage('Tu cuenta Free no permite subir audios tan largos. Haz upgrade a Premium.');
+        setErrorMessage('Almacenamiento Lleno: Has superado el límite de 1GB de tu cuenta Supabase Free (o el archivo es muy pesado). Borra canciones antiguas en WAV para liberar espacio.');
       } else {
         setErrorMessage(error.message || 'Hubo un error al procesar los archivos.');
       }

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body>
+<button id="b">Load</button>
+<script>
+document.getElementById('b').onclick = async () => {
+  try {
+    console.log('fetching...');
+    const res = await fetch('https://ttneetsehlekoajpintk.supabase.co/storage/v1/object/public/audios/00000000-0000-0000-0000-000000000000/7caab92c-b4a0-4efc-8ba7-83c3f4c345e5/1786851664876_Gloria%20a%20Jesus_LNDL_Master%20(Without%20Lead%20Vocal).wav');
+    console.log('res', res.status);
+    const buf = await res.arrayBuffer();
+    console.log('buf', buf.byteLength);
+    const ctx = new AudioContext();
+    const audio = await ctx.decodeAudioData(buf);
+    console.log('audio', audio.duration);
+    alert('SUCCESS: ' + audio.duration);
+  } catch (e) {
+    alert('ERROR: ' + e.message);
+    console.error(e);
+  }
+};
+</script>
+</body>
+</html>
