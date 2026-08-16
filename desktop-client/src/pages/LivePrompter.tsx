@@ -403,7 +403,7 @@ export default function LivePrompter() {
 
       while (!isChordsDone && chordsPollCount < 300) {
         await new Promise(r => setTimeout(r, 2000));
-        const statusRes = await fetch('/api/ai/status', {
+        const statusRes = await fetch('/api/ai/chords/status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
