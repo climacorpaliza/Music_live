@@ -104,9 +104,14 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
   const loadStems = async (_bpm: number, _gridOffsetTime: number = 0, _timeSignature: string = '4/4', _beatTimes: number[] = [], prompterData?: any) => {
     if (!audioContext.current) return;
     
-    // Resume context if suspended (browser auto-play policy)
+    // 🔥 FORZAR RESUME AQUÍ POR SI EL NAVEGADOR BLOQUEA EL DECODE
     if (audioContext.current.state === 'suspended') {
-      await audioContext.current.resume();
+      try {
+        await audioContext.current.resume();
+        console.log('[AudioEngine] Contexto reanudado exitosamente antes de decodificar.');
+      } catch (e) {
+        console.warn('[AudioEngine] No se pudo reanudar el contexto:', e);
+      }
     }
     
     setLoadProgress({ loaded: 0, total: stems.length, currentFile: 'Iniciando descarga...' });
