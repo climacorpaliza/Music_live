@@ -14,7 +14,6 @@ export default function LivePrompter() {
   
   const [prompterData, setPrompterData] = useState<{bpm?: number, timeSignature?: string, firstBeatOffset?: number, beatTimes?: number[], chords: any[], sections: any[], lastAiDetection?: string}>({ chords: [], sections: [] });
   
-  const [isAnalyzingTempo, setIsAnalyzingTempo] = useState(false);
   const [isDetectingChords, setIsDetectingChords] = useState(false);
   const [chordDetectionMsg, setChordDetectionMsg] = useState<string | null>(null);
   
@@ -194,134 +193,6 @@ export default function LivePrompter() {
   };
 
 
-
-  const handleAdaptiveTempoAI = async () => {
-    if (!selectedSongId) {
-      alert("Selecciona una canción primero.");
-      return;
-    }
-    
-    setIsAnalyzingTempo(true);
-    try {
-      // 1. Iniciar análisis
-      const res = await fetch('/api/ai/beats', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ songId: selectedSongId, stems: dbStems })
-      });
-      
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error iniciando IA BeatNet');
-      
-      const { predictionId } = data;
-      console.log("BeatNet prediction ID:", predictionId);
-      
-      // 2. Polling
-      let isDone = false;
-      let rawOutput = null;
-      let attempts = 0;
-      
-      while (!isDone && attempts < 300) { // 10 minutes timeout for Sakemin cold boot
-        await new Promise(r => setTimeout(r, 2000));
-        attempts++;
-        
-        const statusRes = await fetch('/api/ai/beats_status', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ predictionId })
-        });
-        
-        const statusData = await statusRes.json();
-        if (!statusRes.ok) throw new Error(statusData.error || 'Error en polling');
-        
-        if (statusData.done) {
-          isDone = true;
-          rawOutput = statusData.data;
-        } else if (statusData.status === 'failed' || statusData.status === 'canceled') {
-          throw new Error('La predicción de IA falló en Replicate.');
-        }
-      }
-      
-      if (!isDone) throw new Error("Timeout: La IA de Replicate está tardando demasiado en inicializar (Cold Boot). Intenta de nuevo.");
-      
-      // 3. Procesar salida de Sakemin
-      console.log("IA Raw Output:", rawOutput);
-      
-      let actualOutput = rawOutput;
-      
-      // Sakemin devuelve un array con 1 URL apuntando al JSON estructurado
-      if (Array.isArray(actualOutput) && actualOutput.length > 0 && typeof actualOutput[0] === 'string' && actualOutput[0].startsWith('http')) {
-        console.log("Fetching JSON from URL:", actualOutput[0]);
-        const beatFileRes = await fetch(actualOutput[0]);
-        actualOutput = await beatFileRes.json();
-        console.log("Fetched actual output:", actualOutput);
-      }
-      
-      const beatTimes: number[] = actualOutput.beats || [];
-      const downbeats: number[] = actualOutput.downbeats || [];
-      let firstDownbeatTime: number | null = downbeats.length > 0 ? downbeats[0] : null;
-      
-      if (beatTimes.length === 0) {
-         throw new Error("No se detectaron beats en la salida de la IA.");
-      }
-      
-      // Extraer secciones si la canción no tenía
-      const newSections = [...(prompterData.sections || [])];
-      if (actualOutput.segments && actualOutput.segments.length > 0 && newSections.length === 0) {
-        actualOutput.segments.forEach((seg: any) => {
-           newSections.push({ name: seg.label.toUpperCase(), time: seg.start });
-        });
-      }
-
-      const baseOffset = firstDownbeatTime !== null 
-        ? firstDownbeatTime 
-        : (prompterData.firstBeatOffset || 0);
-
-      const detectedBpm = actualOutput.bpm || prompterData.bpm;
-
-      setPrompterData(prev => ({ 
-        ...prev, 
-        bpm: detectedBpm,
-        beatTimes: beatTimes,
-        firstBeatOffset: baseOffset,
-        sections: newSections
-      }));
-      
-      await loadStems(detectedBpm, baseOffset + manualGridOffset, prompterData.timeSignature, beatTimes, { 
-        ...prompterData, 
-        bpm: detectedBpm,
-        beatTimes: beatTimes,
-        firstBeatOffset: baseOffset,
-        sections: newSections
-      });
-      
-      // ✅ Paso 2 automático: iniciar detección de acordes inmediatamente
-      // El usuario no necesita hacer clic en un botón separado
-      setIsAnalyzingTempo(false); // Liberar el estado de tempo antes de continuar
-      
-      const updatedPrompterData = {
-        ...prompterData,
-        bpm: detectedBpm,
-        beatTimes: beatTimes,
-        firstBeatOffset: baseOffset,
-        sections: newSections
-      };
-      
-      // Guardar en Supabase antes de detectar acordes
-      if (selectedSongId) {
-        await supabase.from('songs').update({ prompter_data: updatedPrompterData }).eq('id', selectedSongId);
-      }
-      
-      // Ahora iniciar detección de acordes automáticamente
-      await handleDetectChordsAI();
-      
-    } catch (err: any) {
-      console.error(err);
-      alert(err.message);
-    } finally {
-      setIsAnalyzingTempo(false);
-    }
-  };
 
   const handleHalveTempo = async () => {
     if (!prompterData.bpm) return;
@@ -741,12 +612,12 @@ export default function LivePrompter() {
           {/* AI Tools Group */}
           <div className="flex items-center bg-[#1A1A1A] rounded-lg border border-[#333] p-1 shadow-lg">
             <button 
-              onClick={handleAdaptiveTempoAI}
-              disabled={isAnalyzingTempo}
+              onClick={handleDetectChordsAI}
+              disabled={isDetectingChords}
               className="bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 px-3 py-1.5 rounded-md text-xs font-bold transition disabled:opacity-50 flex items-center space-x-1.5 mr-1"
-              title="Detectar tempo y downbeats exactos (Requiere Internet)"
+              title="Detectar acordes con IA (usa la grilla ya detectada en Stem Studio)"
             >
-              {isAnalyzingTempo ? (
+              {isDetectingChords ? (
                 <>
                   <Activity size={12} className="animate-pulse" />
                   <span>ANALIZANDO...</span>
@@ -758,15 +629,7 @@ export default function LivePrompter() {
                 </>
               )}
             </button>
-            <button 
-              onClick={handleDetectChordsAI}
-              disabled={isDetectingChords}
-              className="bg-pink-600/20 hover:bg-pink-600/40 text-pink-400 px-3 py-1.5 rounded-md text-xs font-bold transition disabled:opacity-50 flex items-center space-x-1.5 mr-2"
-              title="Detectar acordes"
-            >
-              <Sparkles size={12} />
-              <span>{isDetectingChords ? '...' : 'ACORDES'}</span>
-            </button>
+
 
             <div className="w-px h-6 bg-[#333] mx-1"></div>
 
