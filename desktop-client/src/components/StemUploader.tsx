@@ -162,11 +162,12 @@ export default function StemUploader({ songId, bandId, onUploadComplete }: StemU
       if (onUploadComplete) onUploadComplete(activeSongId ?? undefined);
     } catch (error: any) {
       console.error('Error uploading stem:', error);
+      alert('DETALLE DEL ERROR BRUTO: ' + JSON.stringify(error, Object.getOwnPropertyNames(error)));
       setUploadStatus('error');
-      if (error.message?.includes('Tier Limit Reached')) {
-        setErrorMessage('Almacenamiento Lleno: Has superado el límite de 1GB de tu cuenta Supabase Free (o el archivo es muy pesado). Borra canciones antiguas en WAV para liberar espacio.');
+      if (error.message?.includes('Tier Limit Reached') || error.error === 'Tenant quota exceeded' || error.statusCode === 413) {
+        setErrorMessage('Almacenamiento Lleno: Has superado el límite de 1GB de tu cuenta Supabase Free (o el archivo es muy pesado). Borra canciones antiguas en WAV para liberar espacio. ERROR BRUTO: ' + error.message);
       } else {
-        setErrorMessage(error.message || 'Hubo un error al procesar los archivos.');
+        setErrorMessage(error.message || 'Error desconocido al subir archivo');
       }
     } finally {
       setIsUploading(false);
