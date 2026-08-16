@@ -173,31 +173,7 @@ export default function StemStudio() {
     }
   };
 
-  const handleDeleteSong = async (id: string) => {
-    if (!window.confirm('¿Seguro que deseas eliminar esta canción y todas sus pistas?')) return;
-    try {
-      // 1. Borrar la canción (Supabase on delete cascade borrará los stems en la BD)
-      const { error } = await supabase.from('songs').delete().eq('id', id);
-      if (error) throw error;
-      
-      // 2. Borrar los archivos físicos del bucket de Storage para evitar Storage Leaks
-      // Supabase no borra la carpeta automáticamente
-      const folderPath = `00000000-0000-0000-0000-000000000000/${id}`;
-      const { data: files } = await supabase.storage.from('audios').list(folderPath);
-      if (files && files.length > 0) {
-        const filePaths = files.map(f => `${folderPath}/${f.name}`);
-        await supabase.storage.from('audios').remove(filePaths);
-      }
 
-      // Actualizar UI
-      setSongs(songs.filter(s => s.id !== id));
-      if (selectedSongId === id) setSelectedSongId('');
-      
-    } catch (error: any) {
-      console.error(error);
-      alert('Error al eliminar la canción: ' + error.message);
-    }
-  };
 
   const deleteStem = async (stemId: string) => {
     if (!confirm('¿Estás seguro de que quieres eliminar esta pista?')) return;
