@@ -101,8 +101,14 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
   }, []);
 
   // 2. Cargar Buffers en Memoria
-  const loadStems = async (_bpm: number, _gridOffsetTime: number = 0, _timeSignature: string = '4/4', _beatTimes: number[] = [], prompterData?: any) => {
+  const loadStems = async (_bpm: number, _gridOffsetTime: number = 0, _timeSignature: string = '4/4', _beatTimes: number[] = [], prompterData?: any, stemsToLoad?: StemTrack[]) => {
     if (!audioContext.current) return;
+    
+    // 🔑 FIX: Usar stemsToLoad si se pasa explícitamente (evita bug de closure de React
+    // donde `stems` puede estar desactualizado cuando se llama loadStems justo después de setStems)
+    const activeStemsArray = stemsToLoad ?? stems;
+    
+    console.log(`[AudioEngine] loadStems iniciado con ${activeStemsArray.length} pistas.`, activeStemsArray.map(s => s.name));
     
     // 🔥 FORZAR RESUME AQUÍ POR SI EL NAVEGADOR BLOQUEA EL DECODE
     if (audioContext.current.state === 'suspended') {
@@ -114,11 +120,11 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       }
     }
     
-    setLoadProgress({ loaded: 0, total: stems.length, currentFile: 'Iniciando descarga...' });
+    setLoadProgress({ loaded: 0, total: activeStemsArray.length, currentFile: 'Iniciando descarga...' });
     let loadedCount = 0;
     let maxDuration = 0;
 
-    for (const stem of stems) {
+    for (const stem of activeStemsArray) {
       if (buffers.current.has(stem.id)) {
         loadedCount++;
         continue;
@@ -138,7 +144,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
            throw new Error(`HTTP Error: ${response.status}`);
         }
         
-        setLoadProgress({ loaded: loadedCount, total: stems.length, currentFile: `Decodificando audio en RAM: ${stem.name}` });
+        setLoadProgress({ loaded: loadedCount, total: activeStemsArray.length, currentFile: `Decodificando audio en RAM: ${stem.name}` });
         
         const arrayBuffer = await response.arrayBuffer();
         console.log(`[Cazador de Errores] ArrayBuffer descargado para ${stem.name}. Tamaño:`, arrayBuffer.byteLength);
@@ -157,7 +163,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
         }
         
         loadedCount++;
-        setLoadProgress({ loaded: loadedCount, total: stems.length, currentFile: `Completado: ${stem.name}` });
+        setLoadProgress({ loaded: loadedCount, total: activeStemsArray.length, currentFile: `Completado: ${stem.name}` });
       } catch (err: any) {
         console.error(`Error loading stem ${stem.name}:`, err);
         alert(`Fallo general al cargar ${stem.name}. Revisa la consola (F12). Error: ${err.message}`);
@@ -166,10 +172,10 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     }
     
     // --- AUTO-ADAPTACIÓN RÍTMICA (COMPENSACIÓN DE LATENCIA EN NAVEGADOR) ---
-    const drumStem = stems.find(s => s.name.toLowerCase().includes('drum') || s.name.toLowerCase().includes('bater') || s.name.toLowerCase().includes('perc'));
+    const drumStem = activeStemsArray.find(s => s.name.toLowerCase().includes('drum') || s.name.toLowerCase().includes('bater') || s.name.toLowerCase().includes('perc'));
     if (drumStem && buffers.current.has(drumStem.id) && prompterData && prompterData.beatTimes && prompterData.beatTimes.length > 0) {
         try {
-            setLoadProgress({ loaded: stems.length, total: stems.length, currentFile: `Sincronizando transitorios...` });
+            setLoadProgress({ loaded: activeStemsArray.length, total: activeStemsArray.length, currentFile: `Sincronizando transitorios...` });
             const drumBuffer = buffers.current.get(drumStem.id)!;
             const data = drumBuffer.getChannelData(0);
             const sr = drumBuffer.sampleRate;
@@ -227,10 +233,6 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
 
     // Calcular preRollDuration basado en el BPM (1 compás extra)
     let preRollDuration = 0;
-    // const beatsPerMeasure = parseInt(timeSignature.split('/')[0]) || 4;
-    // if (bpm && bpm > 0) {
-    //   preRollDuration = (60 / bpm) * beatsPerMeasure;
-    // }
     preRollDurationRef.current = preRollDuration;
     setTotalDuration(maxDuration);
 
@@ -267,8 +269,9 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
        }
     }));
 
-    setLoadProgress({ loaded: stems.length, total: stems.length, currentFile: '¡Todas las pistas cargadas en RAM!' });
+    setLoadProgress({ loaded: activeStemsArray.length, total: activeStemsArray.length, currentFile: '¡Todas las pistas cargadas en RAM!' });
   };
+
 
 
 

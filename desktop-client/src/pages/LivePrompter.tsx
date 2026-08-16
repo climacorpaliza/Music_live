@@ -134,7 +134,7 @@ export default function LivePrompter() {
       const baseOffset = prompterData.firstBeatOffset !== undefined 
         ? prompterData.firstBeatOffset 
         : (prompterData.chords && prompterData.chords.length > 0 ? prompterData.chords[0].time : 0);
-      await loadStems(prompterData.bpm || 120, baseOffset + manualGridOffset, prompterData.timeSignature, prompterData.beatTimes, prompterData);
+      await loadStems(prompterData.bpm || 120, baseOffset + manualGridOffset, prompterData.timeSignature, prompterData.beatTimes, prompterData, stems);
       setAudioLoaded(true);
     } catch (error: any) {
       setLoadError("Error descargando las pistas. Asegúrate de tener conexión y permisos CORS habilitados en el Bucket.");
