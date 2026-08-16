@@ -295,7 +295,25 @@ export default function LivePrompter() {
         sections: newSections
       });
       
-      alert(`Análisis IA PRO MAX completado.\nBPM: ${detectedBpm}\nBeats: ${beatTimes.length}\nSecciones: ${newSections.length}`);
+      // ✅ Paso 2 automático: iniciar detección de acordes inmediatamente
+      // El usuario no necesita hacer clic en un botón separado
+      setIsAnalyzingTempo(false); // Liberar el estado de tempo antes de continuar
+      
+      const updatedPrompterData = {
+        ...prompterData,
+        bpm: detectedBpm,
+        beatTimes: beatTimes,
+        firstBeatOffset: baseOffset,
+        sections: newSections
+      };
+      
+      // Guardar en Supabase antes de detectar acordes
+      if (selectedSongId) {
+        await supabase.from('songs').update({ prompter_data: updatedPrompterData }).eq('id', selectedSongId);
+      }
+      
+      // Ahora iniciar detección de acordes automáticamente
+      await handleDetectChordsAI();
       
     } catch (err: any) {
       console.error(err);
