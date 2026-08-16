@@ -44,6 +44,16 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
   const pannerNodes = useRef<Map<string, StereoPannerNode>>(new Map());
   const buffers = useRef<Map<string, AudioBuffer>>(new Map());
 
+  // Limpiar RAM de canciones anteriores para evitar Out Of Memory
+  useEffect(() => {
+    const currentStemIds = new Set(stems.map(s => s.id));
+    for (const id of buffers.current.keys()) {
+      if (!currentStemIds.has(id)) {
+        buffers.current.delete(id);
+      }
+    }
+  }, [stems]);
+
   const splitterNode = useRef<ChannelSplitterNode | null>(null);
   const mergerNode = useRef<ChannelMergerNode | null>(null);
 
