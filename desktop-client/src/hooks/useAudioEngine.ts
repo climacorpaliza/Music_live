@@ -123,33 +123,44 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
         loadedCount++;
         continue;
       }
-      
       try {
-        setLoadProgress({ loaded: loadedCount, total: stems.length, currentFile: `Descargando: ${stem.name}` });
-        
         // Si es el metrónomo sintético o cues, no hacemos fetch
         if (stem.id === 'synthetic-click' || stem.id === 'synthetic-cues') {
           loadedCount++;
           continue;
         }
 
-        // Use standard fetch. Supabase public buckets allow GET from * by default.
+        console.log(`[Cazador de Errores] Iniciando fetch para: ${stem.name}`, stem.url);
         const response = await fetch(stem.url);
-        if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+        console.log(`[Cazador de Errores] Fetch HTTP Status para ${stem.name}:`, response.status);
+        if (!response.ok) {
+           alert(`Error HTTP al descargar ${stem.name}: ${response.status} ${response.statusText}`);
+           throw new Error(`HTTP Error: ${response.status}`);
+        }
         
         setLoadProgress({ loaded: loadedCount, total: stems.length, currentFile: `Decodificando audio en RAM: ${stem.name}` });
         
         const arrayBuffer = await response.arrayBuffer();
-        const audioBuffer = await audioContext.current.decodeAudioData(arrayBuffer);
-        buffers.current.set(stem.id, audioBuffer);
-        if (audioBuffer.duration > maxDuration) {
-          maxDuration = audioBuffer.duration;
+        console.log(`[Cazador de Errores] ArrayBuffer descargado para ${stem.name}. Tamaño:`, arrayBuffer.byteLength);
+        
+        try {
+          const audioBuffer = await audioContext.current.decodeAudioData(arrayBuffer);
+          console.log(`[Cazador de Errores] Decodificación exitosa para ${stem.name}.`);
+          buffers.current.set(stem.id, audioBuffer);
+          if (audioBuffer.duration > maxDuration) {
+            maxDuration = audioBuffer.duration;
+          }
+        } catch (decodeErr: any) {
+          alert(`[ERROR CRÍTICO DE CODIFICACIÓN] El archivo ${stem.name} está corrupto o el navegador no lo soporta. Mensaje: ${decodeErr.message}`);
+          console.error(`Error decodeAudioData para ${stem.name}:`, decodeErr);
+          throw decodeErr;
         }
         
         loadedCount++;
         setLoadProgress({ loaded: loadedCount, total: stems.length, currentFile: `Completado: ${stem.name}` });
-      } catch (err) {
+      } catch (err: any) {
         console.error(`Error loading stem ${stem.name}:`, err);
+        alert(`Fallo general al cargar ${stem.name}. Revisa la consola (F12). Error: ${err.message}`);
         throw err;
       }
     }
