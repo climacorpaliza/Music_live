@@ -72,9 +72,17 @@ export default function StemUploader({ songId, bandId, onUploadComplete }: StemU
     const { data: publicUrlData } = supabase.storage.from('audios').getPublicUrl(storagePath);
 
     // Identificar si es un Master Track
-    const isMaster = baseName.toLowerCase().includes('master') || 
-                     baseName.toLowerCase().includes('full') || 
-                     baseName.toLowerCase().includes('mezcla');
+    // Solo es master si el nombre termina con "master", "full" o "mezcla" SIN un instrumento entre paréntesis al final
+    // Ej: "Song Master.wav" → master=true
+    //     "Song Master (Drums).wav" → master=false (es un stem con nombre de canción que incluye "Master")
+    const nameWithoutExt = baseName.toLowerCase();
+    const hasInstrumentSuffix = /\(([^)]+)\)\s*$/.test(baseName); // termina en (algo)
+    const isMaster = !hasInstrumentSuffix && (
+      nameWithoutExt.endsWith('master') ||
+      nameWithoutExt.endsWith('full') ||
+      nameWithoutExt.endsWith('mezcla') ||
+      nameWithoutExt.endsWith('mix')
+    );
 
     // 4. Insertar en la tabla stems
     const { error: dbError } = await supabase.from('stems').insert({
