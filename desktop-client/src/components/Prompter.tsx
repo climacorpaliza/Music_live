@@ -109,9 +109,9 @@ export const Prompter: React.FC<PrompterProps> = ({ currentTime, bpm, timeSignat
       firstBeatTime = gridOffsetTime;
     }
 
-    // Filtrar acordes basura detectados durante silencios o metrónomos iniciales (pre-roll)
-    // Si un acorde comienza mucho antes del primer beat detectado, lo descartamos
-    const validChords = chords.filter(c => c.time >= firstBeatTime - 0.2);
+    // Filtrar acordes basura detectados mucho antes de que inicie la canción
+    // En lugar de usar firstBeatTime (que puede ser a los 10 segundos si la batería entra tarde), usamos baseOffsetTime.
+    const validChords = chords.filter(c => c.time >= (baseOffsetTime || 0) - 2.0);
 
     // Primera pasada: Cuantizar todos los acordes
     const quantizedChords = validChords.map(chord => {
@@ -265,8 +265,8 @@ export const Prompter: React.FC<PrompterProps> = ({ currentTime, bpm, timeSignat
                   key={`sec-${i}`}
                   className={`absolute h-full flex flex-col justify-center border-l-4 ${colorClass} ${isActive ? 'brightness-125 shadow-[0_0_20px_rgba(255,255,255,0.4)] z-20' : isPast ? 'opacity-50 z-10' : 'opacity-90 z-10'} transition-all cursor-pointer rounded-r hover:brightness-110`}
                   style={{
-                    left: block.time * pixelsPerSecond,
-                    width: block.duration * pixelsPerSecond
+                    left: `${block.time * pixelsPerSecond}px`,
+                    width: `${block.duration * pixelsPerSecond}px`
                   }}
                 >
                   <div className="px-3 flex justify-between items-center w-full">
@@ -295,8 +295,8 @@ export const Prompter: React.FC<PrompterProps> = ({ currentTime, bpm, timeSignat
                   key={i} 
                   className={`absolute h-full flex flex-col justify-center border-l-2 ${block.isActive ? 'border-yellow-400 bg-yellow-500/20 shadow-[inset_0_0_30px_rgba(234,179,8,0.2)]' : isPast ? 'border-gray-700 bg-gray-900/40' : 'border-[#333] bg-[#111]'} transition-colors duration-200 cursor-pointer hover:bg-white/5 rounded-r-lg`}
                   style={{ 
-                    left: block.time * pixelsPerSecond, 
-                    width: Math.max(block.duration * pixelsPerSecond - 2, 20) // -2px para margen visual
+                    left: `${block.time * pixelsPerSecond}px`, 
+                    width: `${Math.max(block.duration * pixelsPerSecond - 2, 20)}px`
                   }}
                   onDoubleClick={() => {
                     // TODO: Implementar edición
