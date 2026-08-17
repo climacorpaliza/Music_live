@@ -302,8 +302,16 @@ export default function LivePrompter() {
           })
         });
         
-        const statusData = await statusRes.json();
-        if (!statusRes.ok) throw new Error(statusData.error || 'Error en polling acordes');
+        const responseText = await statusRes.text();
+        let statusData;
+        try {
+          statusData = JSON.parse(responseText);
+        } catch (e) {
+          console.error("Respuesta no-JSON recibida del servidor (polling):", responseText);
+          throw new Error(`Respuesta inválida del servidor al consultar el estado de la IA.`);
+        }
+        
+        if (!statusRes.ok) throw new Error(statusData.error || `Error en polling acordes (HTTP ${statusRes.status})`);
 
         if (statusData.done) {
           isChordsDone = true;
