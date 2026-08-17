@@ -4,7 +4,8 @@ const { createClient } = require('@supabase/supabase-js');
 const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
 
 const SUPABASE_URL = 'https://ttneetsehlekoajpintk.supabase.co';
-const supabase = createClient(SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+const supabase = createClient(SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY);
+
 
 function formatChordName(chord) {
   if (chord === 'N' || !chord) return null;
