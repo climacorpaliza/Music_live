@@ -387,10 +387,28 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       const beatsPerMeasure = parseInt(prompterData.timeSignature?.split('/')[0]) || 4;
       
       let shiftedBeatTimes: number[] = [];
+      let unshiftedCount = 0;
+      
       if (prompterData.beatTimes && prompterData.beatTimes.length > 0) {
+         let bTimes = [...prompterData.beatTimes.map((t: number) => t + preRollDuration)];
          
+         // Extrapolar hacia atrás (para tener metrónomo antes de que entre la batería)
+         let firstBeat = bTimes[0];
+         while (firstBeat - beatInterval >= 0) {
+             firstBeat -= beatInterval;
+             bTimes.unshift(firstBeat);
+             unshiftedCount++;
+         }
          
-         shiftedBeatTimes = [...prompterData.beatTimes.map((t: number) => t + preRollDuration)];
+         // Extrapolar hacia adelante (para tener metrónomo después de que termine la batería)
+         let lastBeat = bTimes[bTimes.length - 1];
+         const maxTime = preRollDuration + (totalDuration > 0 ? totalDuration : 600);
+         while (lastBeat + beatInterval <= maxTime + 5) {
+             lastBeat += beatInterval;
+             bTimes.push(lastBeat);
+         }
+         
+         shiftedBeatTimes = bTimes;
       } else {
          const maxTime = preRollDuration + (totalDuration > 0 ? totalDuration : 600);
          const startOffset = (prompterData.firstBeatOffset || 0) + manualGridOffset;
@@ -406,6 +424,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       if (prompterData.beatTimes && prompterData.beatTimes.length > 0) {
          downbeatIndex = prompterData.beatTimes.findIndex((t: number) => Math.abs(t - (prompterData.firstBeatOffset || 0)) < 0.05);
          if (downbeatIndex === -1) downbeatIndex = 0;
+         downbeatIndex += unshiftedCount;
       }
       
       let beatCount = 0;
@@ -446,9 +465,22 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       let bTimes: number[] = [];
       
       if (prompterData.beatTimes && prompterData.beatTimes.length > 0) {
-         
-         
          bTimes = [...prompterData.beatTimes.map((t: number) => t + preRollDuration)];
+         
+         // Extrapolar hacia atrás
+         let firstBeat = bTimes[0];
+         while (firstBeat - beatInterval >= 0) {
+             firstBeat -= beatInterval;
+             bTimes.unshift(firstBeat);
+         }
+         
+         // Extrapolar hacia adelante
+         let lastBeat = bTimes[bTimes.length - 1];
+         const maxTime = preRollDuration + (totalDuration > 0 ? totalDuration : 600);
+         while (lastBeat + beatInterval <= maxTime + 5) {
+             lastBeat += beatInterval;
+             bTimes.push(lastBeat);
+         }
       } else {
          const maxTime = preRollDuration + (totalDuration > 0 ? totalDuration : 600);
          const startOffset = (prompterData.firstBeatOffset || 0) + manualGridOffset;
@@ -656,10 +688,28 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
            const beatInterval = 60 / prompterData.bpm;
            const beatsPerMeasure = parseInt(prompterData.timeSignature?.split('/')[0]) || 4;
            let shiftedBeatTimes: number[] = [];
+           let unshiftedCount = 0;
+           
            if (prompterData.beatTimes && prompterData.beatTimes.length > 0) {
+              let bTimes = [...prompterData.beatTimes.map((t: number) => t + preRollDuration)];
               
+              // Extrapolar hacia atrás
+              let firstBeat = bTimes[0];
+              while (firstBeat - beatInterval >= 0) {
+                  firstBeat -= beatInterval;
+                  bTimes.unshift(firstBeat);
+                  unshiftedCount++;
+              }
               
-              shiftedBeatTimes = [...prompterData.beatTimes.map((t: number) => t + preRollDuration)];
+              // Extrapolar hacia adelante
+              let lastBeat = bTimes[bTimes.length - 1];
+              const maxTime = preRollDuration + (totalDuration > 0 ? totalDuration : 600);
+              while (lastBeat + beatInterval <= maxTime + 5) {
+                  lastBeat += beatInterval;
+                  bTimes.push(lastBeat);
+              }
+              
+              shiftedBeatTimes = bTimes;
            } else {
               const startOffset = (prompterData.firstBeatOffset || 0) + manualGridOffset;
               for (let t = preRollDuration; t <= lengthSeconds; t += beatInterval) {
@@ -674,6 +724,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
            if (prompterData.beatTimes && prompterData.beatTimes.length > 0) {
               downbeatIndex = prompterData.beatTimes.findIndex((t: number) => Math.abs(t - (prompterData.firstBeatOffset || 0)) < 0.05);
               if (downbeatIndex === -1) downbeatIndex = 0;
+              downbeatIndex += unshiftedCount;
            }
            
            let beatCount = 0;
@@ -711,10 +762,24 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
            const beatInterval = 60 / prompterData.bpm;
            
            let bTimes: number[] = [];
+           
            if (prompterData.beatTimes && prompterData.beatTimes.length > 0) {
-              
-              
               bTimes = [...prompterData.beatTimes.map((t: number) => t + preRollDuration)];
+              
+              // Extrapolar hacia atrás
+              let firstBeat = bTimes[0];
+              while (firstBeat - beatInterval >= 0) {
+                  firstBeat -= beatInterval;
+                  bTimes.unshift(firstBeat);
+              }
+              
+              // Extrapolar hacia adelante
+              let lastBeat = bTimes[bTimes.length - 1];
+              const maxTime = preRollDuration + (totalDuration > 0 ? totalDuration : 600);
+              while (lastBeat + beatInterval <= maxTime + 5) {
+                  lastBeat += beatInterval;
+                  bTimes.push(lastBeat);
+              }
            } else {
               const startOffset = (prompterData.firstBeatOffset || 0) + manualGridOffset;
               for (let t = preRollDuration; t <= lengthSeconds; t += beatInterval) {
