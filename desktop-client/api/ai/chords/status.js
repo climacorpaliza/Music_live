@@ -1,11 +1,10 @@
-const Replicate = require('replicate');
-const { createClient } = require('@supabase/supabase-js');
+import Replicate from 'replicate';
+import { createClient } from '@supabase/supabase-js';
 
 const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
 
 const SUPABASE_URL = 'https://ttneetsehlekoajpintk.supabase.co';
 const supabase = createClient(SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY);
-
 
 function formatChordName(chord) {
   if (chord === 'N' || !chord) return null;
@@ -14,8 +13,7 @@ function formatChordName(chord) {
   return clean;
 }
 
-module.exports = async function handler(req, res) {
-  // CORS headers
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -74,9 +72,7 @@ module.exports = async function handler(req, res) {
 
     console.log(`[IA-Status] Acordes finales: ${finalChords.length}`);
 
-    prompterData.chords = finalChords;
-
-    // Guardar en Supabase manteniendo los datos existentes (sections, beatTimes, etc.)
+    // Merge con datos existentes para no perder beatTimes/sections/bpm
     const { data: existingSong } = await supabase
       .from('songs')
       .select('prompter_data')
@@ -86,7 +82,7 @@ module.exports = async function handler(req, res) {
     const mergedData = {
       ...(existingSong?.prompter_data || {}),
       ...prompterData,
-      chords: finalChords  // Los acordes siempre se actualizan
+      chords: finalChords
     };
 
     const { error: updateError } = await supabase
@@ -95,6 +91,8 @@ module.exports = async function handler(req, res) {
       .eq('id', songId);
 
     if (updateError) throw new Error(`Error guardando en BD: ${updateError.message}`);
+
+    console.log(`[IA-Status] Guardado en Supabase OK. Acordes: ${finalChords.length}`);
 
     return res.status(200).json({
       done: true,
@@ -106,4 +104,4 @@ module.exports = async function handler(req, res) {
     console.error('[IA-Status] Error:', error);
     return res.status(500).json({ error: error.message });
   }
-};
+}

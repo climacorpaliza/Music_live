@@ -1,9 +1,8 @@
-const Replicate = require('replicate');
+import Replicate from 'replicate';
 
 const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
 
-module.exports = async function handler(req, res) {
-  // CORS headers
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -29,13 +28,13 @@ module.exports = async function handler(req, res) {
       selectedStem = stems.find(s => !s.name.toLowerCase().includes('click') && !s.name.toLowerCase().includes('drum')) || stems[0];
     }
 
-    console.log(`[IA] Stem seleccionado: ${selectedStem.name} → ${selectedStem.file_url}`);
+    console.log(`[IA] Stem seleccionado: ${selectedStem.name}`);
+    console.log(`[IA] Enviando Master Ghost Bounce a Replicate TriadMusic (Acordes)`);
 
     const finalCalculatedBpm = detectedBpm || 120;
     const extractedFirstBeat = firstBeat || 0.0;
     const extractedBeatTimes = beatTimes || [];
 
-    // Crear predicción en Replicate (asíncrona)
     const prediction = await replicate.predictions.create({
       version: "be95be0303fd42000c413aec595922499f8b946d65416f31fb0034c2daf81f19",
       input: {
@@ -66,4 +65,4 @@ module.exports = async function handler(req, res) {
     console.error('[IA] Error:', error);
     return res.status(500).json({ error: error.message });
   }
-};
+}
