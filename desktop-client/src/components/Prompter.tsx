@@ -90,7 +90,6 @@ export const Prompter: React.FC<PrompterProps> = ({ currentTime, bpm, timeSignat
 
     // Crear grilla de corcheas basada en beatTimes reales
     let eighthGrid: number[] = [];
-    let firstBeatTime = 0;
     
     if (useRealGrid) {
       eighthGrid = [];
@@ -99,14 +98,12 @@ export const Prompter: React.FC<PrompterProps> = ({ currentTime, bpm, timeSignat
         eighthGrid.push((beatTimes[i] + beatTimes[i + 1]) / 2); // Mid-beat (Corchea)
       }
       eighthGrid.push(beatTimes[beatTimes.length - 1]);
-      firstBeatTime = beatTimes[0];
     } else {
       // Fallback matemático (el original)
       for (let i = -16; i < 2000; i++) {
         eighthGrid.push(gridOffsetTime + i * eighthNoteDuration);
         eighthGrid.push(gridOffsetTime + (i + 0.5) * eighthNoteDuration);
       }
-      firstBeatTime = gridOffsetTime;
     }
 
     // Filtrar acordes basura detectados mucho antes de que inicie la canción
