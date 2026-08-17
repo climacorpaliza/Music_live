@@ -10,7 +10,7 @@ const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 export default function LivePrompter() {
   const [songs, setSongs] = useState<any[]>([]);
   const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
-  const { loadStems, play, pause, seekTo, isPlaying, currentTime, routingMode, setRoutingMode, stems, setStems, loadProgress, totalDuration, preRollDuration, exportLiveMix, exportGhostBounce } = useAudioEngine([]);
+  const { loadStems, play, pause, seekTo, isPlaying, currentTime, routingMode, setRoutingMode, stems, setStems, loadProgress, totalDuration, preRollDuration, exportLiveMix } = useAudioEngine([]);
   
   const [prompterData, setPrompterData] = useState<{bpm?: number, timeSignature?: string, firstBeatOffset?: number, beatTimes?: number[], chords: any[], sections: any[], lastAiDetection?: string}>({ chords: [], sections: [] });
   
@@ -253,40 +253,70 @@ export default function LivePrompter() {
       alert("Selecciona una canción primero.");
       return;
     }
+    if (!dbStems || dbStems.length === 0) {
+      alert("No hay stems en la base de datos para esta canción.");
+      return;
+    }
+
     setIsDetectingChords(true);
-    setChordDetectionMsg("Paso 1: Generando Ghost Bounce (volumen 100%)...");
+    setChordDetectionMsg("Buscando el mejor stem para análisis armónico...");
+
     try {
-      const bounceBlob = await exportGhostBounce((msg) => setChordDetectionMsg(`Paso 1: ${msg}`));
-      
-      setChordDetectionMsg("Paso 2: Subiendo pista a la nube...");
-      const fakeBandId = "local-band";
-      const bouncePath = `${fakeBandId}/${selectedSongId}/mixes/ghost_${Date.now()}.wav`;
-      
-      const { supabase } = await import('../lib/supabase');
-      const { error: bounceError } = await supabase.storage.from('audios').upload(bouncePath, bounceBlob, { contentType: 'audio/wav', upsert: true });
-      if (bounceError) throw bounceError;
-      
-      const bounceUrl = supabase.storage.from('audios').getPublicUrl(bouncePath).data.publicUrl;
-      
-      setChordDetectionMsg("Paso 3: Iniciando análisis de Armonía con IA...");
+      // ✅ NUEVO ENFOQUE: Usar directamente los stems de la BD (sin Ghost Bounce, sin RAM)
+      // Prioridad: Piano > Guitarra > Cuerdas > Sintetizador > cualquier instrumento melódico
+      // Excluir: Drums, Kick, Snare, Click, Clave, Bajo (sin contenido armónico)
+      const EXCLUDED_KEYWORDS = ['drum', 'kick', 'snare', 'click', 'clave', 'bass', 'bajo', 'perc', 'hihat', 'cymbal'];
+      const PREFERRED_KEYWORDS = ['piano', 'guitar', 'guitarra', 'keys', 'strings', 'pad', 'synth', 'organ', 'teclado'];
+
+      const instrumentStems = dbStems.filter((s: any) => {
+        const name = (s.name || s.file_name || '').toLowerCase();
+        return !EXCLUDED_KEYWORDS.some(kw => name.includes(kw));
+      });
+
+      // Buscar un stem preferido primero
+      let bestStem = instrumentStems.find((s: any) => {
+        const name = (s.name || s.file_name || '').toLowerCase();
+        return PREFERRED_KEYWORDS.some(kw => name.includes(kw));
+      });
+
+      // Si no hay preferido, usar el primer instrumento disponible
+      if (!bestStem) bestStem = instrumentStems[0];
+
+      // Último recurso: usar el primer stem de todos
+      if (!bestStem) bestStem = dbStems[0];
+
+      const stemName = bestStem.name || bestStem.file_name || 'Stem';
+      const stemUrl = bestStem.file_url;
+
+      console.log(`[IA PRO] Stem seleccionado para análisis: ${stemName}`);
+      setChordDetectionMsg(`Analizando acordes en: ${stemName}...`);
+
       const res = await fetch('/api/ai/chords', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           songId: selectedSongId,
           timeSignature: prompterData.timeSignature || "4/4",
-          stems: [{ name: 'Master Ghost Bounce', file_url: bounceUrl, type: 'Instrument', metadata: { is_master: true } }],
+          stems: [{ name: stemName, file_url: stemUrl, type: 'Instrument', metadata: { is_master: true } }],
           detectedBpm: prompterData.bpm,
           firstBeat: prompterData.firstBeatOffset || 0,
           beatTimes: prompterData.beatTimes || [],
           sections: prompterData.sections || []
         })
       });
-      const data = await res.json();
+
+      const responseText = await res.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        throw new Error(`Respuesta inválida del servidor: ${responseText.substring(0, 100)}`);
+      }
       if (!res.ok) throw new Error(data.error || 'Error desconocido del servidor IA');
-      
+
       const { predictionId, prompterData: pdFromApi } = data;
-      
+      setChordDetectionMsg(`IA procesando acordes... (esto toma 2-5 minutos)`);
+
       let chordsPollCount = 1;
       let isChordsDone = false;
 
@@ -295,51 +325,52 @@ export default function LivePrompter() {
         const statusRes = await fetch('/api/ai/chords/status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             predictionId,
-            prompterData: pdFromApi, 
+            prompterData: pdFromApi,
             songId: selectedSongId
           })
         });
-        
-        const responseText = await statusRes.text();
+
+        const statusText = await statusRes.text();
         let statusData;
         try {
-          statusData = JSON.parse(responseText);
+          statusData = JSON.parse(statusText);
         } catch (e) {
-          console.error("Respuesta no-JSON recibida del servidor (polling):", responseText);
+          console.error("Respuesta no-JSON del servidor (polling):", statusText);
           throw new Error(`Respuesta inválida del servidor al consultar el estado de la IA.`);
         }
-        
+
         if (!statusRes.ok) throw new Error(statusData.error || `Error en polling acordes (HTTP ${statusRes.status})`);
 
         if (statusData.done) {
           isChordsDone = true;
           setChordDetectionMsg("¡Acordes generados exitosamente!");
-          
+
           const { data: songData } = await supabase.from('songs').select('prompter_data').eq('id', selectedSongId).single();
           if (songData?.prompter_data) {
-             setPrompterData(songData.prompter_data);
+            setPrompterData(songData.prompter_data);
           }
           setTimeout(() => setChordDetectionMsg(null), 5000);
         } else {
           if (statusData.status === 'starting' && chordsPollCount > 10) {
-            setChordDetectionMsg(`Paso 3: IA despertando. Puede tomar 5-10 min... (Intento ${chordsPollCount})`);
+            setChordDetectionMsg(`IA despertando (cold boot)... puede tomar 5-10 min (Intento ${chordsPollCount})`);
           } else {
-            setChordDetectionMsg(`Paso 3: IA Procesando... Estado: ${statusData.status} (Intento ${chordsPollCount})`);
+            setChordDetectionMsg(`IA procesando... Estado: ${statusData.status} (Intento ${chordsPollCount})`);
           }
         }
         chordsPollCount++;
       }
-      
+
     } catch (error: any) {
-       console.error("Error detecting chords AI:", error);
-       alert(`Falló la detección IA: ${error.message}`);
-       setChordDetectionMsg(null);
+      console.error("Error detecting chords AI:", error);
+      alert(`Falló la detección IA: ${error.message}`);
+      setChordDetectionMsg(null);
     } finally {
-       setIsDetectingChords(false);
+      setIsDetectingChords(false);
     }
   };
+
 
   const handleVolumeChange = (stemId: string, newVolume: number) => {
     setStems((prev: any[]) => prev.map((s: any) => s.id === stemId ? { ...s, volume: newVolume } : s));
