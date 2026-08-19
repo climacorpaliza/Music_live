@@ -633,8 +633,15 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
 
   const exportLiveMix = async (songId: string, bandId: string, onProgress: (msg: string) => void) => {
     if (!audioContext.current) throw new Error("AudioContext not initialized");
+    if (buffers.current.size === 0) throw new Error("Las pistas no están cargadas en memoria. Por favor presiona 'Cargar a RAM' primero.");
+    
+    let maxBufDuration = totalDuration;
+    buffers.current.forEach(buf => {
+       if (buf.duration > maxBufDuration) maxBufDuration = buf.duration;
+    });
+    
     const sampleRate = audioContext.current.sampleRate;
-    const lengthSeconds = totalDuration + preRollDurationRef.current + 5; // 5 seconds tail
+    const lengthSeconds = maxBufDuration + preRollDurationRef.current + 5; // 5 seconds tail
     const lengthSamples = Math.ceil(lengthSeconds * sampleRate);
 
     const renderMix = async (isFoh: boolean): Promise<Blob> => {
@@ -925,8 +932,15 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
 
   const exportGhostBounce = async (onProgress: (msg: string) => void): Promise<Blob> => {
     if (!audioContext.current) throw new Error("AudioContext not initialized");
+    if (buffers.current.size === 0) throw new Error("Las pistas no están cargadas en memoria. Por favor presiona 'Cargar a RAM' primero.");
+    
+    let maxBufDuration = totalDuration;
+    buffers.current.forEach(buf => {
+       if (buf.duration > maxBufDuration) maxBufDuration = buf.duration;
+    });
+
     const sampleRate = audioContext.current.sampleRate;
-    const lengthSeconds = totalDuration + preRollDurationRef.current + 5; 
+    const lengthSeconds = maxBufDuration + preRollDurationRef.current + 5; 
     const lengthSamples = Math.ceil(lengthSeconds * sampleRate);
 
     onProgress('Preparando Ghost Bounce...');
@@ -966,8 +980,15 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
 
   const exportMultitrackToZip = async (songName: string, onProgress: (msg: string) => void) => {
     if (!audioContext.current) throw new Error("AudioContext not initialized");
+    if (buffers.current.size === 0) throw new Error("Las pistas no están cargadas en memoria. Por favor presiona 'Cargar a RAM' primero.");
+    
+    let maxBufDuration = totalDuration;
+    buffers.current.forEach(buf => {
+       if (buf.duration > maxBufDuration) maxBufDuration = buf.duration;
+    });
+
     const sampleRate = audioContext.current.sampleRate;
-    const lengthSeconds = totalDuration + preRollDurationRef.current + 5; 
+    const lengthSeconds = maxBufDuration + preRollDurationRef.current + 5; 
     const lengthSamples = Math.ceil(lengthSeconds * sampleRate);
     const preRollDuration = preRollDurationRef.current;
     const JSZip = (await import('jszip')).default;
