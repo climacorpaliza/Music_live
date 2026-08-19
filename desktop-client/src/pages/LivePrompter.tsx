@@ -263,24 +263,33 @@ export default function LivePrompter() {
 
     try {
       // ✅ NUEVO ENFOQUE: Usar directamente los stems de la BD (sin Ghost Bounce, sin RAM)
-      // Prioridad: Piano > Guitarra > Cuerdas > Sintetizador > cualquier instrumento melódico
+      // Prioridad: Master > Piano > Guitarra > Cuerdas > Sintetizador > cualquier instrumento melódico
       // Excluir: Drums, Kick, Snare, Click, Clave, Bajo (sin contenido armónico)
+      const MASTER_KEYWORDS = ['master', 'mezcla', 'mix', 'full', 'pista', 'instrumental'];
       const EXCLUDED_KEYWORDS = ['drum', 'kick', 'snare', 'click', 'clave', 'bass', 'bajo', 'perc', 'hihat', 'cymbal'];
       const PREFERRED_KEYWORDS = ['piano', 'guitar', 'guitarra', 'keys', 'strings', 'pad', 'synth', 'organ', 'teclado'];
 
-      const instrumentStems = dbStems.filter((s: any) => {
+      // Primero buscar un master explícito
+      let bestStem = dbStems.find((s: any) => {
         const name = (s.name || s.file_name || '').toLowerCase();
-        return !EXCLUDED_KEYWORDS.some(kw => name.includes(kw));
+        return MASTER_KEYWORDS.some(kw => name.includes(kw));
       });
 
-      // Buscar un stem preferido primero
-      let bestStem = instrumentStems.find((s: any) => {
-        const name = (s.name || s.file_name || '').toLowerCase();
-        return PREFERRED_KEYWORDS.some(kw => name.includes(kw));
-      });
+      if (!bestStem) {
+        const instrumentStems = dbStems.filter((s: any) => {
+          const name = (s.name || s.file_name || '').toLowerCase();
+          return !EXCLUDED_KEYWORDS.some(kw => name.includes(kw));
+        });
 
-      // Si no hay preferido, usar el primer instrumento disponible
-      if (!bestStem) bestStem = instrumentStems[0];
+        // Buscar un stem preferido primero
+        bestStem = instrumentStems.find((s: any) => {
+          const name = (s.name || s.file_name || '').toLowerCase();
+          return PREFERRED_KEYWORDS.some(kw => name.includes(kw));
+        });
+
+        // Si no hay preferido, usar el primer instrumento disponible
+        if (!bestStem) bestStem = instrumentStems[0];
+      }
 
       // Último recurso: usar el primer stem de todos
       if (!bestStem) bestStem = dbStems[0];
