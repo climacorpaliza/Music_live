@@ -17,6 +17,7 @@
     "@types/file-saver": "^2.0.7",
     "file-saver": "^2.0.5",
     "jszip": "^3.10.1",
+    "lamejs": "^1.2.1",
     "lucide-react": "^1.27.0",
     "music-metadata": "^11.14.0",
     "music-tempo": "^1.0.3",

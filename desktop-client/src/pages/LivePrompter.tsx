@@ -10,7 +10,7 @@ const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 export default function LivePrompter() {
   const [songs, setSongs] = useState<any[]>([]);
   const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
-  const { loadStems, play, pause, seekTo, isPlaying, currentTime, routingMode, setRoutingMode, stems, setStems, loadProgress, totalDuration, preRollDuration, exportLiveMix, exportMultitrackToZip } = useAudioEngine([]);
+  const { loadStems, play, pause, seekTo, isPlaying, currentTime, routingMode, setRoutingMode, stems, setStems, loadProgress, totalDuration, preRollDuration, exportLiveMix, exportMultitrackToZip, exportFullMixToMp3 } = useAudioEngine([]);
   
   const [prompterData, setPrompterData] = useState<{bpm?: number, timeSignature?: string, firstBeatOffset?: number, beatTimes?: number[], chords: any[], sections: any[], lastAiDetection?: string}>({ chords: [], sections: [] });
   
@@ -27,6 +27,7 @@ export default function LivePrompter() {
   
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingMultitrack, setIsExportingMultitrack] = useState(false);
+  const [isExportingMp3, setIsExportingMp3] = useState(false);
   const [exportProgress, setExportProgress] = useState('');
   
   // Stems as returned from Supabase
@@ -579,6 +580,24 @@ export default function LivePrompter() {
     }
   };
 
+  const handleExportFullMixMp3 = async () => {
+    if (!selectedSongId) return;
+    const song = songs.find(s => s.id === selectedSongId);
+    const songName = song ? song.title : 'song';
+    if (confirm('¿Deseas exportar la mezcla completa (todos los stems, click y cues) en formato MP3 (Alta Calidad 320kbps)?')) {
+      setIsExportingMp3(true);
+      try {
+        await exportFullMixToMp3(songName, setExportProgress);
+        alert('¡Exportación a MP3 completada exitosamente!');
+      } catch (err: any) {
+        alert(err.message);
+      } finally {
+        setIsExportingMp3(false);
+        setExportProgress('');
+      }
+    }
+  };
+
   // ==========================================
 
   return (
@@ -920,6 +939,13 @@ export default function LivePrompter() {
                   className="bg-orange-600 hover:bg-orange-500 text-white px-4 py-2 rounded font-bold shadow-lg disabled:opacity-50 text-sm whitespace-nowrap ml-2"
                 >
                   {isExportingMultitrack ? (exportProgress || 'Exportando...') : 'Exportar Stems ZIP'}
+                </button>
+                <button 
+                  onClick={handleExportFullMixMp3}
+                  disabled={isExportingMp3}
+                  className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded font-bold shadow-lg disabled:opacity-50 text-sm whitespace-nowrap ml-2"
+                >
+                  {isExportingMp3 ? (exportProgress || 'Exportando...') : 'Exportar Mezcla MP3'}
                 </button>
                 <button 
                   onClick={handleSaveMixConfig}
