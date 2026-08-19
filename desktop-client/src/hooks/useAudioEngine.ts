@@ -1166,6 +1166,8 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     onProgress('Descargando archivo...');
     saveAs(zipBlob, `${songName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_stems.zip`);
     onProgress('');
+  };
+
   const exportFullMixToMp3 = async (songName: string, onProgress: (msg: string) => void) => {
     if (!audioContext.current) throw new Error("AudioContext not initialized");
     if (buffers.current.size === 0) throw new Error("Las pistas no están cargadas en memoria. Por favor presiona 'Cargar a RAM' primero.");
@@ -1344,6 +1346,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     onProgress('Codificando a MP3 Alta Calidad (320kbps)...');
     
     // Import lamejs dynamically
+    // @ts-ignore
     const lamejsModule = await import('lamejs');
     const lamejs = lamejsModule.default || lamejsModule;
     const { saveAs } = await import('file-saver');
