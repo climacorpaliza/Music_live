@@ -1345,6 +1345,11 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
 
     onProgress('Codificando a MP3 Alta Calidad (320kbps)...');
     
+    // Fix lamejs MPEGMode ReferenceError in modern bundlers
+    // @ts-ignore
+    const MPEGModeModule = await import('lamejs/src/js/MPEGMode.js');
+    (window as any).MPEGMode = MPEGModeModule.default || MPEGModeModule;
+
     // Import lamejs dynamically
     // @ts-ignore
     const lamejsModule = await import('lamejs');
