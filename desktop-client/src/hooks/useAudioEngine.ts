@@ -1345,15 +1345,14 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
 
     onProgress('Codificando a MP3 Alta Calidad (320kbps)...');
     
-    // Fix lamejs MPEGMode ReferenceError in modern bundlers
-    // @ts-ignore
-    const MPEGModeModule = await import('lamejs/src/js/MPEGMode.js');
-    (window as any).MPEGMode = MPEGModeModule.default || MPEGModeModule;
-
-    // Import lamejs dynamically
-    // @ts-ignore
-    const lamejsModule = await import('lamejs');
-    const lamejs = lamejsModule.default || lamejsModule;
+    // Inject lame.all.js globally to bypass Vite strict mode and missing CommonJS requirements
+    if (!(window as any).lamejs) {
+        const lamejsSrc = await import('lamejs/lame.all.js?raw');
+        const script = document.createElement('script');
+        script.innerHTML = lamejsSrc.default + '\nwindow.lamejs = lamejs;';
+        document.head.appendChild(script);
+    }
+    const lamejs = (window as any).lamejs;
     const { saveAs } = await import('file-saver');
 
     const channels = renderedBuffer.numberOfChannels;
