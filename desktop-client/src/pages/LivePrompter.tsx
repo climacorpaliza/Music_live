@@ -10,7 +10,7 @@ const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 export default function LivePrompter() {
   const [songs, setSongs] = useState<any[]>([]);
   const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
-  const { loadStems, play, pause, seekTo, isPlaying, currentTime, routingMode, setRoutingMode, stems, setStems, loadProgress, totalDuration, preRollDuration, exportLiveMix } = useAudioEngine([]);
+  const { loadStems, play, pause, seekTo, isPlaying, currentTime, routingMode, setRoutingMode, stems, setStems, loadProgress, totalDuration, preRollDuration, exportLiveMix, exportMultitrackToZip } = useAudioEngine([]);
   
   const [prompterData, setPrompterData] = useState<{bpm?: number, timeSignature?: string, firstBeatOffset?: number, beatTimes?: number[], chords: any[], sections: any[], lastAiDetection?: string}>({ chords: [], sections: [] });
   
@@ -26,6 +26,7 @@ export default function LivePrompter() {
   const [prompterText, setPrompterText] = useState('');
   
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingMultitrack, setIsExportingMultitrack] = useState(false);
   const [exportProgress, setExportProgress] = useState('');
   
   // Stems as returned from Supabase
@@ -560,6 +561,24 @@ export default function LivePrompter() {
     }
   };
 
+  const handleExportMultitrackToZip = async () => {
+    if (!selectedSongId) return;
+    const song = songs.find(s => s.id === selectedSongId);
+    const songName = song ? song.title : 'song';
+    if (confirm('¿Estás seguro de que deseas exportar cada pista (stems, click, cues) en WAV separados dentro de un archivo ZIP? (Esto tomará unos minutos)')) {
+      setIsExportingMultitrack(true);
+      try {
+        await exportMultitrackToZip(songName, setExportProgress);
+        alert('¡Exportación Multitrack completada exitosamente!');
+      } catch (err: any) {
+        alert(err.message);
+      } finally {
+        setIsExportingMultitrack(false);
+        setExportProgress('');
+      }
+    }
+  };
+
   // ==========================================
 
   return (
@@ -894,6 +913,13 @@ export default function LivePrompter() {
                   className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold shadow-lg disabled:opacity-50 text-sm whitespace-nowrap"
                 >
                   {isExporting ? (exportProgress || 'Exportando...') : 'Exportar FOH/CUE'}
+                </button>
+                <button 
+                  onClick={handleExportMultitrackToZip}
+                  disabled={isExportingMultitrack}
+                  className="bg-orange-600 hover:bg-orange-500 text-white px-4 py-2 rounded font-bold shadow-lg disabled:opacity-50 text-sm whitespace-nowrap ml-2"
+                >
+                  {isExportingMultitrack ? (exportProgress || 'Exportando...') : 'Exportar Stems ZIP'}
                 </button>
                 <button 
                   onClick={handleSaveMixConfig}
