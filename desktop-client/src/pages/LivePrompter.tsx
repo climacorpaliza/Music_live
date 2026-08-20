@@ -275,11 +275,18 @@ export default function LivePrompter() {
         return !EXCLUDED_KEYWORDS.some(kw => name.includes(kw));
       });
 
-      // Buscar un stem preferido primero
-      let bestStem = instrumentStems.find((s: any) => {
-        const name = (s.name || s.file_name || '').toLowerCase();
-        return PREFERRED_KEYWORDS.some(kw => name.includes(kw));
-      });
+      // Buscar un stem preferido respetando el orden estricto de PREFERRED_KEYWORDS
+      let bestStem = null;
+      for (const kw of PREFERRED_KEYWORDS) {
+        const found = instrumentStems.find((s: any) => {
+          const name = (s.name || s.file_name || '').toLowerCase();
+          return name.includes(kw);
+        });
+        if (found) {
+          bestStem = found;
+          break;
+        }
+      }
 
       // Si no hay preferido, usar el primer instrumento disponible
       if (!bestStem) bestStem = instrumentStems[0];
