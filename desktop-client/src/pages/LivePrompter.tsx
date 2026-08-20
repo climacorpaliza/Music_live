@@ -25,6 +25,9 @@ export default function LivePrompter() {
   const [isEditingPrompter, setIsEditingPrompter] = useState(false);
   const [prompterText, setPrompterText] = useState('');
   
+  const [isDraggingSlider, setIsDraggingSlider] = useState(false);
+  const [localSliderTime, setLocalSliderTime] = useState(0);
+
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingMultitrack, setIsExportingMultitrack] = useState(false);
   const [isExportingMp3, setIsExportingMp3] = useState(false);
@@ -678,8 +681,19 @@ export default function LivePrompter() {
               min={-(preRollDuration || 0)} 
               max={totalDuration || 100} 
               step="0.1" 
-              value={currentTime}
-              onChange={(e) => seekTo(parseFloat(e.target.value))}
+              value={isDraggingSlider ? localSliderTime : currentTime}
+              onPointerDown={() => setIsDraggingSlider(true)}
+              onPointerUp={(e) => {
+                setIsDraggingSlider(false);
+                seekTo(parseFloat(e.currentTarget.value));
+              }}
+              onChange={(e) => {
+                setLocalSliderTime(parseFloat(e.target.value));
+                if (!isPlaying) {
+                  // If paused, we can scrub and immediately see the prompter update without stuttering audio
+                  seekTo(parseFloat(e.target.value));
+                }
+              }}
               disabled={!audioLoaded}
               className="flex-1 h-2 bg-[#222] rounded-full appearance-none cursor-pointer disabled:opacity-50"
               style={{

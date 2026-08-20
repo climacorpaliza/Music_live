@@ -23,6 +23,11 @@ export default function LiveConcert() {
   const { broadcast, connections } = useSyncMaster(FAKE_BAND_ID);
   const [broadcastEnabled, setBroadcastEnabled] = useState(false);
 
+  // UI States
+  const [isLoading, setIsLoading] = useState(false);
+  const [isDraggingSlider, setIsDraggingSlider] = useState(false);
+  const [localSliderTime, setLocalSliderTime] = useState(0);
+
   // Audio Context & Nodes
   const audioCtxRef = useRef<AudioContext | null>(null);
   const fohSourceRef = useRef<AudioBufferSourceNode | null>(null);
@@ -362,13 +367,23 @@ export default function LiveConcert() {
           </div>
           
           <div className="w-full flex items-center space-x-3 mt-1">
-            <input 
-              type="range" 
-              min={-(getPreRoll(currentSong) || 0)} 
-              max={totalDuration - getPreRoll(currentSong) || 100} 
-              step="0.1" 
-              value={currentTime}
-              onChange={(e) => seekTo(parseFloat(e.target.value))}
+              <input 
+                type="range" 
+                min={-(getPreRoll(currentSong) || 0)} 
+                max={totalDuration - getPreRoll(currentSong) || 100} 
+                step="0.1" 
+                value={isDraggingSlider ? localSliderTime : currentTime}
+                onPointerDown={() => setIsDraggingSlider(true)}
+                onPointerUp={(e) => {
+                  setIsDraggingSlider(false);
+                  seekTo(parseFloat(e.currentTarget.value));
+                }}
+                onChange={(e) => {
+                  setLocalSliderTime(parseFloat(e.target.value));
+                  if (!isPlaying) {
+                    seekTo(parseFloat(e.target.value));
+                  }
+                }}
               disabled={isLoading || !currentSong}
               className="flex-1 h-2 bg-[#222] rounded-lg appearance-none cursor-pointer disabled:opacity-50"
               style={{
