@@ -23,8 +23,7 @@ export default function LiveConcert() {
   const { broadcast, connections } = useSyncMaster(FAKE_BAND_ID);
   const [broadcastEnabled, setBroadcastEnabled] = useState(false);
 
-  // UI States
-  const [isLoading, setIsLoading] = useState(false);
+
   const [isDraggingSlider, setIsDraggingSlider] = useState(false);
   const [localSliderTime, setLocalSliderTime] = useState(0);
 
