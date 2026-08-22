@@ -106,12 +106,8 @@ export const Prompter: React.FC<PrompterProps> = ({ currentTime, bpm, timeSignat
       }
     }
 
-    // Filtrar acordes basura detectados mucho antes de que inicie la canción
-    // En lugar de usar firstBeatTime (que puede ser a los 10 segundos si la batería entra tarde), usamos baseOffsetTime.
-    const validChords = chords.filter(c => c.time >= (baseOffsetTime || 0) - 2.0);
-
     // Primera pasada: Cuantizar todos los acordes
-    const quantizedChords = validChords.map(chord => {
+    const quantizedChords = chords.map(chord => {
       let qTime = chord.time;
       
       if (useRealGrid && eighthGrid.length > 0) {
