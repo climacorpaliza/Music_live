@@ -631,7 +631,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     });
   }, [stems, isPlaying]);
 
-  const exportLiveMix = async (songId: string, bandId: string, onProgress: (msg: string) => void) => {
+  const exportLiveMix = async (songId: string, bandId: string, currentPrompterData: any, onProgress: (msg: string) => void) => {
     if (!audioContext.current) throw new Error("AudioContext not initialized");
     if (buffers.current.size === 0) throw new Error("Las pistas no están cargadas en memoria. Por favor presiona 'Cargar a RAM' primero.");
     
@@ -648,7 +648,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       onProgress(`Preparando renderizado ${isFoh ? 'FOH' : 'CUE'}...`);
       const offlineCtx = new (window.OfflineAudioContext || (window as any).webkitOfflineAudioContext)(2, lengthSamples, sampleRate);
       
-      const prompterData = prompterDataRef.current;
+      const prompterData = currentPrompterData || prompterDataRef.current;
       const manualGridOffset = manualGridOffsetRef.current;
       const preRollDuration = preRollDurationRef.current;
 
@@ -978,7 +978,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     return audioBufferToWavBlob(renderedBuffer);
   };
 
-  const exportMultitrackToZip = async (songName: string, onProgress: (msg: string) => void) => {
+  const exportMultitrackToZip = async (songName: string, currentPrompterData: any, onProgress: (msg: string) => void) => {
     if (!audioContext.current) throw new Error("AudioContext not initialized");
     if (buffers.current.size === 0) throw new Error("Las pistas no están cargadas en memoria. Por favor presiona 'Cargar a RAM' primero.");
     
@@ -1003,7 +1003,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       const offlineCtx = new (window.OfflineAudioContext || (window as any).webkitOfflineAudioContext)(2, lengthSamples, sampleRate);
       
       if (stem.id === 'synthetic-click' || stem.id === 'synthetic-cues') {
-        const prompterData = prompterDataRef.current;
+        const prompterData = currentPrompterData || prompterDataRef.current;
         const manualGridOffset = manualGridOffsetRef.current;
         
         if (stem.id === 'synthetic-click' && prompterData && prompterData.bpm) {
@@ -1168,7 +1168,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     onProgress('');
   };
 
-  const exportFullMixToMp3 = async (songName: string, onProgress: (msg: string) => void) => {
+  const exportFullMixToMp3 = async (songName: string, currentPrompterData: any, onProgress: (msg: string) => void) => {
     if (!audioContext.current) throw new Error("AudioContext not initialized");
     if (buffers.current.size === 0) throw new Error("Las pistas no están cargadas en memoria. Por favor presiona 'Cargar a RAM' primero.");
     
@@ -1184,7 +1184,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     onProgress('Preparando renderizado Mezcla Completa...');
     const offlineCtx = new (window.OfflineAudioContext || (window as any).webkitOfflineAudioContext)(2, lengthSamples, sampleRate);
     
-    const prompterData = prompterDataRef.current;
+    const prompterData = currentPrompterData || prompterDataRef.current;
     const manualGridOffset = manualGridOffsetRef.current;
     const preRollDuration = preRollDurationRef.current;
 

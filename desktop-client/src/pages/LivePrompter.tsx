@@ -561,7 +561,7 @@ export default function LivePrompter() {
     if (confirm('¿Estás seguro de que deseas exportar la mezcla con la configuración de volumen y paneo actual? (Esto tomará unos segundos)')) {
       setIsExporting(true);
       try {
-        await exportLiveMix(selectedSongId, FAKE_BAND_ID, setExportProgress);
+        await exportLiveMix(selectedSongId, FAKE_BAND_ID, prompterData, setExportProgress);
         alert('¡Exportación dual completada exitosamente!');
       } catch (err: any) {
         alert(err.message);
@@ -579,7 +579,7 @@ export default function LivePrompter() {
     if (confirm('¿Estás seguro de que deseas exportar cada pista (stems, click, cues) en WAV separados dentro de un archivo ZIP? (Esto tomará unos minutos)')) {
       setIsExportingMultitrack(true);
       try {
-        await exportMultitrackToZip(songName, setExportProgress);
+        await exportMultitrackToZip(songName, prompterData, setExportProgress);
         alert('¡Exportación Multitrack completada exitosamente!');
       } catch (err: any) {
         alert(err.message);
@@ -597,7 +597,7 @@ export default function LivePrompter() {
     if (confirm('¿Deseas exportar la mezcla completa (todos los stems, click y cues) en formato MP3 (Alta Calidad 320kbps)?')) {
       setIsExportingMp3(true);
       try {
-        await exportFullMixToMp3(songName, setExportProgress);
+        await exportFullMixToMp3(songName, prompterData, setExportProgress);
         alert('¡Exportación a MP3 completada exitosamente!');
       } catch (err: any) {
         alert(err.message);
