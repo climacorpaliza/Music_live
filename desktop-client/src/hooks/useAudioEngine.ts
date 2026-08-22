@@ -1008,7 +1008,6 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     const lengthSeconds = maxBufDuration + calculatedPreRoll + 5; 
     const lengthSamples = Math.ceil(lengthSeconds * sampleRate);
     const preRollDuration = calculatedPreRoll;
-    const manualGridOffset = manualGridOffsetRef.current;
     const JSZip = (await import('jszip')).default;
     const { saveAs } = await import('file-saver');
 
