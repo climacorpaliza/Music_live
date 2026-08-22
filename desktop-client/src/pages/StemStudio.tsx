@@ -116,9 +116,25 @@ export default function StemStudio() {
              });
            }
 
-           const beatTimes: number[] = rawOutput.beats || [];
+           let beatTimes: number[] = rawOutput.beats || [];
            const downbeats: number[] = rawOutput.downbeats || [];
            const firstDownbeatTime = downbeats.length > 0 ? downbeats[0] : (beatTimes.length > 0 ? beatTimes[0] : 0);
+
+           if (beatTimes.length > 0 && rawOutput.bpm > 0) {
+               const beatInterval = 60 / rawOutput.bpm;
+               // Extrapolar hacia atrás (para rellenar intros de piano/guitarra sin batería)
+               let firstBeat = beatTimes[0];
+               while (firstBeat - beatInterval >= 0) {
+                   firstBeat -= beatInterval;
+                   beatTimes.unshift(firstBeat);
+               }
+               // Extrapolar hacia adelante hasta 600 segundos (10 minutos)
+               let lastBeat = beatTimes[beatTimes.length - 1];
+               while (lastBeat + beatInterval <= 600) {
+                   lastBeat += beatInterval;
+                   beatTimes.push(lastBeat);
+               }
+           }
 
            beatsPrompterData = {
              bpm: rawOutput.bpm,
