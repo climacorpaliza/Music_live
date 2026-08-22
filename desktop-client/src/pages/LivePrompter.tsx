@@ -416,7 +416,7 @@ export default function LivePrompter() {
     if (data?.sections) {
       data.sections.forEach((s: any) => {
         const mins = Math.floor(s.time / 60).toString().padStart(2, '0');
-        const secs = (s.time % 60).toString().padStart(2, '0');
+        const secs = (s.time % 60).toFixed(2).padStart(5, '0');
         text += `${mins}:${secs} ${s.section || s.name}\n`;
       });
     }
@@ -424,7 +424,7 @@ export default function LivePrompter() {
     if (data?.chords) {
       data.chords.forEach((c: any) => {
         const mins = Math.floor(c.time / 60).toString().padStart(2, '0');
-        const secs = (c.time % 60).toString().padStart(2, '0');
+        const secs = (c.time % 60).toFixed(2).padStart(5, '0');
         text += `${mins}:${secs} ${c.chord}\n`;
       });
     }
@@ -444,10 +444,11 @@ export default function LivePrompter() {
         continue;
       }
       
-      const match = t.match(/^(\d{2}):(\d{2})\s+(.+)$/);
+      // Machea MM:SS o MM:SS.ss
+      const match = t.match(/^(\d{2}):(\d{2}(?:\.\d+)?)\s+(.+)$/);
       if (match) {
         const minutes = parseInt(match[1], 10);
-        const seconds = parseInt(match[2], 10);
+        const seconds = parseFloat(match[2]);
         const time = minutes * 60 + seconds;
         const content = match[3].trim();
 
@@ -920,7 +921,10 @@ export default function LivePrompter() {
                    <Save size={14} /> <span>Guardar en Nube</span>
                  </button>
                ) : (
-                 <button onClick={() => setIsEditingPrompter(true)} disabled={!selectedSongId} className="text-gray-400 flex items-center space-x-1 hover:text-white text-sm disabled:opacity-50">
+                 <button onClick={() => {
+                  setPrompterText(stringifyPrompterData(prompterData));
+                  setIsEditingPrompter(true);
+                }} disabled={!selectedSongId} className="text-gray-400 flex items-center space-x-1 hover:text-white text-sm disabled:opacity-50">
                    <Edit3 size={14} /> <span>Editar Acordes</span>
                  </button>
                )}
