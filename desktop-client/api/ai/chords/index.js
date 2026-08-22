@@ -34,6 +34,9 @@ export default async function handler(req, res) {
     const finalCalculatedBpm = detectedBpm || 120;
     const extractedFirstBeat = firstBeat || 0.0;
     const extractedBeatTimes = beatTimes || [];
+    const extractedSections = req.body.sections && req.body.sections.length > 0 
+      ? req.body.sections 
+      : [{ time: Number(Number(extractedFirstBeat).toFixed(3)), name: "INTRO" }];
 
     const prediction = await replicate.predictions.create({
       version: "be95be0303fd42000c413aec595922499f8b946d65416f31fb0034c2daf81f19",
@@ -52,7 +55,7 @@ export default async function handler(req, res) {
       beatTimes: extractedBeatTimes,
       timeSignature: timeSignature || '4/4',
       chords: [],
-      sections: [{ time: Number(Number(extractedFirstBeat).toFixed(3)), name: "INTRO" }]
+      sections: extractedSections
     };
 
     return res.status(200).json({

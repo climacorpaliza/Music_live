@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 
 const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
 
-const SUPABASE_URL = 'https://ttneetsehlekoajpintk.supabase.co';
-const supabase = createClient(SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY);
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ttneetsehlekoajpintk.supabase.co';
+const supabase = createClient(SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
 function formatChordName(chord) {
   if (chord === 'N' || !chord) return null;
@@ -42,11 +42,12 @@ export default async function handler(req, res) {
     let rawOutput = prediction.output;
 
     if (typeof rawOutput === 'string' && rawOutput.startsWith('http')) {
+      console.log("[IA-Status] Replicate devolvió una URL, descargando JSON...");
       try {
         const fetchRes = await fetch(rawOutput);
         rawOutput = await fetchRes.json();
       } catch (err) {
-        console.error("Error fetching Replicate JSON output:", err);
+        console.error("[IA-Status] Error descargando JSON de Replicate:", err);
       }
     }
 
@@ -90,8 +91,8 @@ export default async function handler(req, res) {
       .single();
 
     const mergedData = {
-      ...(existingSong?.prompter_data || {}),
       ...prompterData,
+      ...(existingSong?.prompter_data || {}),
       chords: finalChords
     };
 

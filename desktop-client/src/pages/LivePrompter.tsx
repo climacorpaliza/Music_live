@@ -271,7 +271,7 @@ export default function LivePrompter() {
       // Prioridad: Piano > Guitarra > Cuerdas > Sintetizador > cualquier instrumento melódico
       // Excluir: Drums, Kick, Snare, Click, Clave, Bajo (sin contenido armónico)
       const EXCLUDED_KEYWORDS = ['drum', 'kick', 'snare', 'click', 'clave', 'bass', 'bajo', 'perc', 'hihat', 'cymbal'];
-      const PREFERRED_KEYWORDS = ['piano', 'guitar', 'guitarra', 'keys', 'strings', 'pad', 'synth', 'organ', 'teclado'];
+      const PREFERRED_KEYWORDS = ['rhythm guitar', 'electric guitar', 'guitar', 'guitarra', 'piano', 'keys', 'teclado', 'strings', 'pad', 'synth', 'organ'];
 
       const instrumentStems = dbStems.filter((s: any) => {
         const name = (s.name || s.file_name || '').toLowerCase();
