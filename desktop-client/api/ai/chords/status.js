@@ -39,7 +39,17 @@ export default async function handler(req, res) {
 
     console.log("[IA-Status] Replicate completado. RAW OUTPUT:", JSON.stringify(prediction.output));
 
-    const rawOutput = prediction.output;
+    let rawOutput = prediction.output;
+
+    if (typeof rawOutput === 'string' && rawOutput.startsWith('http')) {
+      try {
+        const fetchRes = await fetch(rawOutput);
+        rawOutput = await fetchRes.json();
+      } catch (err) {
+        console.error("Error fetching Replicate JSON output:", err);
+      }
+    }
+
     const replicateChords =
       rawOutput?.chord_segments ||
       rawOutput?.chords ||
