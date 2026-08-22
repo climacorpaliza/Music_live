@@ -639,18 +639,26 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     buffers.current.forEach(buf => {
        if (buf.duration > maxBufDuration) maxBufDuration = buf.duration;
     });
+
+    const prompterData = currentPrompterData || prompterDataRef.current;
+    
+    let calculatedPreRoll = 0;
+    if (prompterData && prompterData.bpm > 0) {
+       const beatsPerMeasure = parseInt(prompterData.timeSignature?.split('/')[0]) || 4;
+       const secondsPerBeat = 60 / prompterData.bpm;
+       calculatedPreRoll = (secondsPerBeat * beatsPerMeasure) * 2;
+    }
     
     const sampleRate = audioContext.current.sampleRate;
-    const lengthSeconds = maxBufDuration + preRollDurationRef.current + 5; // 5 seconds tail
+    const lengthSeconds = maxBufDuration + calculatedPreRoll + 5; // 5 seconds tail
     const lengthSamples = Math.ceil(lengthSeconds * sampleRate);
 
     const renderMix = async (isFoh: boolean): Promise<Blob> => {
       onProgress(`Preparando renderizado ${isFoh ? 'FOH' : 'CUE'}...`);
       const offlineCtx = new (window.OfflineAudioContext || (window as any).webkitOfflineAudioContext)(2, lengthSamples, sampleRate);
       
-      const prompterData = currentPrompterData || prompterDataRef.current;
       const manualGridOffset = manualGridOffsetRef.current;
-      const preRollDuration = preRollDurationRef.current;
+      const preRollDuration = calculatedPreRoll;
 
       // Render Stems
       stems.forEach(stem => {
@@ -719,7 +727,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
               shiftedBeatTimes = bTimes;
            } else {
               const startOffset = (prompterData.firstBeatOffset || 0) + manualGridOffset;
-              for (let t = preRollDuration; t <= lengthSeconds; t += beatInterval) {
+              for (let t = 0; t <= lengthSeconds; t += beatInterval) {
                   const adjusted = t + startOffset;
                   if (adjusted >= 0) shiftedBeatTimes.push(adjusted);
               }
@@ -789,7 +797,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
               }
            } else {
               const startOffset = (prompterData.firstBeatOffset || 0) + manualGridOffset;
-              for (let t = preRollDuration; t <= lengthSeconds; t += beatInterval) {
+              for (let t = 0; t <= lengthSeconds; t += beatInterval) {
                   const adjusted = t + startOffset;
                   if (adjusted >= 0) bTimes.push(adjusted);
               }
@@ -987,10 +995,20 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
        if (buf.duration > maxBufDuration) maxBufDuration = buf.duration;
     });
 
+    const prompterData = currentPrompterData || prompterDataRef.current;
+    
+    let calculatedPreRoll = 0;
+    if (prompterData && prompterData.bpm > 0) {
+       const beatsPerMeasure = parseInt(prompterData.timeSignature?.split('/')[0]) || 4;
+       const secondsPerBeat = 60 / prompterData.bpm;
+       calculatedPreRoll = (secondsPerBeat * beatsPerMeasure) * 2;
+    }
+
     const sampleRate = audioContext.current.sampleRate;
-    const lengthSeconds = maxBufDuration + preRollDurationRef.current + 5; 
+    const lengthSeconds = maxBufDuration + calculatedPreRoll + 5; 
     const lengthSamples = Math.ceil(lengthSeconds * sampleRate);
-    const preRollDuration = preRollDurationRef.current;
+    const preRollDuration = calculatedPreRoll;
+    const manualGridOffset = manualGridOffsetRef.current;
     const JSZip = (await import('jszip')).default;
     const { saveAs } = await import('file-saver');
 
@@ -1029,7 +1047,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
               shiftedBeatTimes = bTimes;
            } else {
               const startOffset = (prompterData.firstBeatOffset || 0) + manualGridOffset;
-              for (let t = preRollDuration; t <= lengthSeconds; t += beatInterval) {
+              for (let t = 0; t <= lengthSeconds; t += beatInterval) {
                   const adjusted = t + startOffset;
                   if (adjusted >= 0) shiftedBeatTimes.push(adjusted);
               }
@@ -1087,7 +1105,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
               }
            } else {
               const startOffset = (prompterData.firstBeatOffset || 0) + manualGridOffset;
-              for (let t = preRollDuration; t <= lengthSeconds; t += beatInterval) {
+              for (let t = 0; t <= lengthSeconds; t += beatInterval) {
                   const adjusted = t + startOffset;
                   if (adjusted >= 0) bTimes.push(adjusted);
               }
@@ -1177,16 +1195,24 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
        if (buf.duration > maxBufDuration) maxBufDuration = buf.duration;
     });
     
+    const prompterData = currentPrompterData || prompterDataRef.current;
+    
+    let calculatedPreRoll = 0;
+    if (prompterData && prompterData.bpm > 0) {
+       const beatsPerMeasure = parseInt(prompterData.timeSignature?.split('/')[0]) || 4;
+       const secondsPerBeat = 60 / prompterData.bpm;
+       calculatedPreRoll = (secondsPerBeat * beatsPerMeasure) * 2;
+    }
+
     const sampleRate = audioContext.current.sampleRate;
-    const lengthSeconds = maxBufDuration + preRollDurationRef.current + 5; 
+    const lengthSeconds = maxBufDuration + calculatedPreRoll + 5; 
     const lengthSamples = Math.ceil(lengthSeconds * sampleRate);
 
     onProgress('Preparando renderizado Mezcla Completa...');
     const offlineCtx = new (window.OfflineAudioContext || (window as any).webkitOfflineAudioContext)(2, lengthSamples, sampleRate);
     
-    const prompterData = currentPrompterData || prompterDataRef.current;
     const manualGridOffset = manualGridOffsetRef.current;
-    const preRollDuration = preRollDurationRef.current;
+    const preRollDuration = calculatedPreRoll;
 
     stems.forEach(stem => {
       const isMuted = stem.muted;
@@ -1216,7 +1242,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
               shiftedBeatTimes = bTimes;
            } else {
               const startOffset = (prompterData.firstBeatOffset || 0) + manualGridOffset;
-              for (let t = preRollDuration; t <= lengthSeconds; t += beatInterval) {
+              for (let t = 0; t <= lengthSeconds; t += beatInterval) {
                   const adjusted = t + startOffset;
                   if (adjusted >= 0) shiftedBeatTimes.push(adjusted);
               }
@@ -1274,7 +1300,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
               }
            } else {
               const startOffset = (prompterData.firstBeatOffset || 0) + manualGridOffset;
-              for (let t = preRollDuration; t <= lengthSeconds; t += beatInterval) {
+              for (let t = 0; t <= lengthSeconds; t += beatInterval) {
                   const adjusted = t + startOffset;
                   if (adjusted >= 0) bTimes.push(adjusted);
               }
