@@ -463,7 +463,8 @@ export default function LivePrompter() {
 
   const handleSavePrompter = async () => {
     if (!selectedSongId) return;
-    const newData = parsePrompterText(prompterText);
+    const parsedData = parsePrompterText(prompterText);
+    const newData = { ...prompterData, chords: parsedData.chords, sections: parsedData.sections };
     setPrompterData(newData);
     setIsEditingPrompter(false);
     
@@ -561,6 +562,7 @@ export default function LivePrompter() {
     if (confirm('¿Estás seguro de que deseas exportar la mezcla con la configuración de volumen y paneo actual? (Esto tomará unos segundos)')) {
       setIsExporting(true);
       try {
+        await supabase.from('songs').update({ prompter_data: prompterData }).eq('id', selectedSongId);
         await exportLiveMix(selectedSongId, FAKE_BAND_ID, prompterData, setExportProgress);
         alert('¡Exportación dual completada exitosamente!');
       } catch (err: any) {
@@ -579,6 +581,7 @@ export default function LivePrompter() {
     if (confirm('¿Estás seguro de que deseas exportar cada pista (stems, click, cues) en WAV separados dentro de un archivo ZIP? (Esto tomará unos minutos)')) {
       setIsExportingMultitrack(true);
       try {
+        await supabase.from('songs').update({ prompter_data: prompterData }).eq('id', selectedSongId);
         await exportMultitrackToZip(songName, prompterData, setExportProgress);
         alert('¡Exportación Multitrack completada exitosamente!');
       } catch (err: any) {
@@ -597,6 +600,7 @@ export default function LivePrompter() {
     if (confirm('¿Deseas exportar la mezcla completa (todos los stems, click y cues) en formato MP3 (Alta Calidad 320kbps)?')) {
       setIsExportingMp3(true);
       try {
+        await supabase.from('songs').update({ prompter_data: prompterData }).eq('id', selectedSongId);
         await exportFullMixToMp3(songName, prompterData, setExportProgress);
         alert('¡Exportación a MP3 completada exitosamente!');
       } catch (err: any) {
