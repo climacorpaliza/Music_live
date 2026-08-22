@@ -166,7 +166,7 @@ export default function MobileInEar() {
   const getPreRoll = (song: any) => {
     if (!song?.prompter_data?.bpm) return 0;
     const beatsPerMeasure = parseInt(song.prompter_data.timeSignature?.split('/')[0]) || 4;
-    return (60 / song.prompter_data.bpm) * beatsPerMeasure;
+    return (60 / song.prompter_data.bpm) * beatsPerMeasure * 2;
   };
 
   // VIEW RENDERS
