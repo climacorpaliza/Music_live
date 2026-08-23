@@ -64,6 +64,10 @@ export default async function handler(req, res) {
 
     const finalChords = [];
     let lastChord = null;
+    
+    // Grilla maestra obtenida previamente por Sakemin
+    const masterGrid = prompterData?.beatTimes || [];
+    const SNAP_THRESHOLD = 0.15; // 150ms: Umbral de tolerancia para el imán
 
     for (const seg of replicateChords) {
       const chordName = seg.chord || seg.label || seg.name || seg.value || null;
@@ -73,10 +77,33 @@ export default async function handler(req, res) {
 
       const formatted = formatChordName(String(chordName));
       if (formatted && formatted !== lastChord) {
-        finalChords.push({
-          time: Number(Number(startTime).toFixed(2)),
-          chord: formatted
-        });
+        let finalTime = Number(startTime);
+
+        // SNAP (Cuantización magnética a la grilla)
+        if (masterGrid.length > 0) {
+          const closestBeat = masterGrid.reduce((prev, curr) => 
+            Math.abs(curr - finalTime) < Math.abs(prev - finalTime) ? curr : prev
+          );
+          
+          // Si la diferencia es pequeña, lo pegamos exactamente a la línea de la grilla
+          if (Math.abs(closestBeat - finalTime) <= SNAP_THRESHOLD) {
+            finalTime = closestBeat;
+          }
+        }
+
+        const formattedTime = Number(finalTime.toFixed(2));
+
+        // Si por casualidad dos acordes caen exactamente en el mismo beat, nos quedamos con el último
+        const existingChordIndex = finalChords.findIndex(c => c.time === formattedTime);
+        if (existingChordIndex !== -1) {
+          finalChords[existingChordIndex].chord = formatted;
+        } else {
+          finalChords.push({
+            time: formattedTime,
+            chord: formatted
+          });
+        }
+        
         lastChord = formatted;
       }
     }
