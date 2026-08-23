@@ -18,6 +18,7 @@ export default function LiveConcert() {
   const [currentTime, setCurrentTime] = useState(0);
   const [totalDuration, setTotalDuration] = useState(0);
   const [routingMode, setRoutingMode] = useState<'StereoSplit' | 'MultiChannel'>('StereoSplit');
+  const [masterVolume, setMasterVolume] = useState<number>(1.0);
 
   // Network Sync
   const { broadcast, connections } = useSyncMaster(FAKE_BAND_ID);
@@ -37,6 +38,7 @@ export default function LiveConcert() {
   const cueBufferRef = useRef<AudioBuffer | null>(null);
   
   // Nodes for routing
+  const masterGainRef = useRef<GainNode | null>(null);
   const fohGainRef = useRef<GainNode | null>(null);
   const cueGainRef = useRef<GainNode | null>(null);
   const fohPannerRef = useRef<StereoPannerNode | null>(null);
@@ -82,6 +84,12 @@ export default function LiveConcert() {
       loadSongAudio(currentSong);
     }
   }, [currentSongIndex, currentSong, broadcastEnabled]);
+
+  useEffect(() => {
+    if (masterGainRef.current && audioCtxRef.current) {
+      masterGainRef.current.gain.setTargetAtTime(masterVolume, audioCtxRef.current.currentTime, 0.05);
+    }
+  }, [masterVolume]);
 
   const fetchSetlists = async () => {
     const { data } = await supabase.from('setlists').select('*').eq('band_id', FAKE_BAND_ID).order('created_at', { ascending: false });
@@ -171,6 +179,12 @@ export default function LiveConcert() {
     if (fohSourceRef.current) fohSourceRef.current.disconnect();
     if (cueSourceRef.current) cueSourceRef.current.disconnect();
 
+    if (!masterGainRef.current) {
+      masterGainRef.current = ctx.createGain();
+    }
+    masterGainRef.current.gain.value = masterVolume;
+    masterGainRef.current.connect(ctx.destination);
+
     const maxChannels = ctx.destination.maxChannelCount;
     let actualRoutingMode = routingMode;
     if (routingMode === 'MultiChannel' && maxChannels < 4) {
@@ -181,7 +195,7 @@ export default function LiveConcert() {
       ctx.destination.channelCount = maxChannels;
       splitterRef.current = ctx.createChannelSplitter(maxChannels);
       mergerRef.current = ctx.createChannelMerger(maxChannels);
-      mergerRef.current.connect(ctx.destination);
+      mergerRef.current.connect(masterGainRef.current);
     }
 
     fohGainRef.current = ctx.createGain();
@@ -189,17 +203,15 @@ export default function LiveConcert() {
 
     if (actualRoutingMode === 'StereoSplit') {
       // Stereo Split: CUE to Left (-1), FOH to Right (1)
-      // Actually standard: Click/Cue on Left (Pan -1), FOH (Mono mix) on Right (Pan 1)
-      // But FOH mix is stereo. If we pan it 1, both L and R of FOH mix will be squashed to Right output.
       fohPannerRef.current = ctx.createStereoPanner();
       fohPannerRef.current.pan.value = 1; // FOH to Right
       fohGainRef.current.connect(fohPannerRef.current);
-      fohPannerRef.current.connect(ctx.destination);
+      fohPannerRef.current.connect(masterGainRef.current);
 
       cuePannerRef.current = ctx.createStereoPanner();
       cuePannerRef.current.pan.value = -1; // CUE to Left
       cueGainRef.current.connect(cuePannerRef.current);
-      cuePannerRef.current.connect(ctx.destination);
+      cuePannerRef.current.connect(masterGainRef.current);
     } else if (actualRoutingMode === 'MultiChannel' && mergerRef.current) {
       // FOH to Ch 0 & 1 (Stereo)
       fohGainRef.current.connect(mergerRef.current, 0, 0); // L -> 0
@@ -428,6 +440,23 @@ export default function LiveConcert() {
                 <option value="StereoSplit">Stereo Split (L:Cues R:FOH)</option>
                 <option value="MultiChannel">Interfaz USB (Multi)</option>
               </select>
+            </div>
+          </div>
+          
+          {/* Master Volume */}
+          <div className="flex items-center space-x-3 bg-[#1A1A1A] p-2 rounded-lg border border-[#333] w-48">
+            <div className="flex flex-col w-full">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Volumen Master</span>
+                <span className="text-[10px] font-bold text-white">{Math.round(masterVolume * 100)}%</span>
+              </div>
+              <input 
+                type="range" 
+                min="0" max="1.5" step="0.01" 
+                value={masterVolume} 
+                onChange={(e) => setMasterVolume(parseFloat(e.target.value))}
+                className="w-full h-1.5 bg-[#333] rounded-lg appearance-none cursor-pointer"
+              />
             </div>
           </div>
         </div>

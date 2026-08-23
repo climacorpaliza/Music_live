@@ -35,6 +35,14 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
   const isPlayingRef = useRef(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [routingMode, setRoutingMode] = useState<RoutingMode>('StereoSplit');
+  const [masterVolume, setMasterVolume] = useState<number>(1.0);
+  const globalMasterGainNode = useRef<GainNode | null>(null);
+
+  useEffect(() => {
+    if (globalMasterGainNode.current && audioContext.current) {
+      globalMasterGainNode.current.gain.setTargetAtTime(masterVolume, audioContext.current.currentTime, 0.05);
+    }
+  }, [masterVolume]);
   const [stems, setStems] = useState<StemTrack[]>(initialStems);
   const [loadProgress, setLoadProgress] = useState({ loaded: 0, total: 0, currentFile: '' });
   const [totalDuration, setTotalDuration] = useState(0);
@@ -82,6 +90,9 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
   useEffect(() => {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     audioContext.current = new AudioContextClass();
+    globalMasterGainNode.current = audioContext.current.createGain();
+    globalMasterGainNode.current.gain.value = 1.0;
+    globalMasterGainNode.current.connect(audioContext.current.destination);
     
     clickHighBufferRef.current = generateClickBuffer(audioContext.current, 1200);
     clickLowBufferRef.current = generateClickBuffer(audioContext.current, 800);
@@ -294,7 +305,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
       ctx.destination.channelCount = maxChannels;
       splitterNode.current = ctx.createChannelSplitter(maxChannels);
       mergerNode.current = ctx.createChannelMerger(maxChannels);
-      mergerNode.current.connect(ctx.destination);
+      mergerNode.current.connect(globalMasterGainNode.current!);
     }
 
     const hasSolo = stems.some(s => s.solo);
@@ -309,13 +320,13 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
            const panner = ctx.createStereoPanner();
            panner.pan.value = stem.pan || 0;
            gain.connect(panner);
-           panner.connect(ctx.destination);
+           panner.connect(globalMasterGainNode.current!);
            pannerNodes.current.set(stem.id, panner);
          } else if (routingMode === 'MultiChannel' && mergerNode.current) {
            const targetOutput = stem.targetOutputChannel ?? 0;
            gain.connect(mergerNode.current, 0, targetOutput);
          } else {
-           gain.connect(ctx.destination);
+           gain.connect(globalMasterGainNode.current!);
          }
          gainNodes.current.set(stem.id, gain);
          return;
@@ -336,7 +347,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
         const panner = ctx.createStereoPanner();
         panner.pan.value = stem.pan || 0;
         gain.connect(panner);
-        panner.connect(ctx.destination);
+        panner.connect(globalMasterGainNode.current!);
         pannerNodes.current.set(stem.id, panner);
       } else if (routingMode === 'MultiChannel' && mergerNode.current) {
         const targetOutput = stem.targetOutputChannel ?? 0;
@@ -442,7 +453,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
             
             const masterGain = gainNodes.current.get('synthetic-click');
             if (masterGain) source.connect(masterGain);
-            else source.connect(audioContext.current.destination);
+            else source.connect(globalMasterGainNode.current!);
             
             source.start(now + (adjustedTime - globalOffset));
             clickSources.current.push(source);
@@ -515,7 +526,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
                   
                   const masterGain = gainNodes.current.get('synthetic-cues');
                   if (masterGain) gain.connect(masterGain);
-                  else gain.connect(audioContext.current!.destination);
+                  else gain.connect(globalMasterGainNode.current!);
                   
                   // Iniciar la reproducción saltando exactamente el silencio detectado en el cueOffset
                   source.start(now + (absoluteTime - globalOffset), cueOffset);
