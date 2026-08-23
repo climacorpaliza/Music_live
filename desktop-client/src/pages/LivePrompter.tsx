@@ -74,8 +74,8 @@ export default function LivePrompter() {
       // 2. Fetch Stems
       const { data } = await supabase.from('stems').select('*').eq('song_id', selectedSongId);
       if (data && data.length > 0) {
-        // Filtrar el audio master para que NO se reproduzca con los stems
-        const playableStems = data.filter((stem: any) => !stem.metadata?.is_master);
+        // NUEVO: Ahora sí cargamos el master a RAM. Es requerido para la IA de Acordes y útil si es la única pista.
+        const playableStems = data;
         setDbStems(playableStems);
         
         // Map database stems to Audio Engine format
@@ -169,7 +169,7 @@ export default function LivePrompter() {
       
       // Recargar stems de la base de datos para asegurar sincronización en memoria
       const { data } = await supabase.from('stems').select('*').eq('song_id', selectedSongId);
-      if (data) setDbStems(data.filter((stem: any) => !stem.metadata?.is_master));
+      if (data) setDbStems(data);
 
       alert('¡Configuración de mezcla guardada exitosamente!');
     } catch (err: any) {
@@ -267,34 +267,33 @@ export default function LivePrompter() {
     setChordDetectionMsg("Buscando el mejor stem para análisis armónico...");
 
     try {
-      // ✅ NUEVO ENFOQUE: Usar directamente los stems de la BD (sin Ghost Bounce, sin RAM)
-      // Prioridad: Piano > Guitarra > Cuerdas > Sintetizador > cualquier instrumento melódico
-      // Excluir: Drums, Kick, Snare, Click, Clave, Bajo (sin contenido armónico)
-      const EXCLUDED_KEYWORDS = ['drum', 'kick', 'snare', 'click', 'clave', 'bass', 'bajo', 'perc', 'hihat', 'cymbal'];
-      const PREFERRED_KEYWORDS = ['rhythm guitar', 'electric guitar', 'guitar', 'guitarra', 'piano', 'keys', 'teclado', 'strings', 'pad', 'synth', 'organ'];
+      // ✅ NUEVO ENFOQUE: Prioridad ABSOLUTA al track MASTER para mayor solidez en los acordes
+      let bestStem = dbStems.find((s: any) => s.metadata && s.metadata.is_master === true);
 
-      const instrumentStems = dbStems.filter((s: any) => {
-        const name = (s.name || s.file_name || '').toLowerCase();
-        return !EXCLUDED_KEYWORDS.some(kw => name.includes(kw));
-      });
+      if (!bestStem) {
+        // Fallback si no hay master: Piano > Guitarra > etc.
+        const EXCLUDED_KEYWORDS = ['drum', 'kick', 'snare', 'click', 'clave', 'bass', 'bajo', 'perc', 'hihat', 'cymbal'];
+        const PREFERRED_KEYWORDS = ['rhythm guitar', 'electric guitar', 'guitar', 'guitarra', 'piano', 'keys', 'teclado', 'strings', 'pad', 'synth', 'organ'];
 
-      // Buscar un stem preferido respetando el orden estricto de PREFERRED_KEYWORDS
-      let bestStem = null;
-      for (const kw of PREFERRED_KEYWORDS) {
-        const found = instrumentStems.find((s: any) => {
+        const instrumentStems = dbStems.filter((s: any) => {
           const name = (s.name || s.file_name || '').toLowerCase();
-          return name.includes(kw);
+          return !EXCLUDED_KEYWORDS.some(kw => name.includes(kw));
         });
-        if (found) {
-          bestStem = found;
-          break;
+
+        for (const kw of PREFERRED_KEYWORDS) {
+          const found = instrumentStems.find((s: any) => {
+            const name = (s.name || s.file_name || '').toLowerCase();
+            return name.includes(kw);
+          });
+          if (found) {
+            bestStem = found;
+            break;
+          }
         }
+        if (!bestStem) bestStem = instrumentStems[0];
       }
 
-      // Si no hay preferido, usar el primer instrumento disponible
-      if (!bestStem) bestStem = instrumentStems[0];
-
-      // Último recurso: usar el primer stem de todos
+      // Último recurso
       if (!bestStem) bestStem = dbStems[0];
 
       const stemName = bestStem.name || bestStem.file_name || 'Stem';
