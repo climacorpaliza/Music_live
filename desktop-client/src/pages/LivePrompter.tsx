@@ -686,16 +686,20 @@ export default function LivePrompter() {
               max={totalDuration || 100} 
               step="0.1" 
               value={isDraggingSlider ? localSliderTime : currentTime}
-              onPointerDown={() => setIsDraggingSlider(true)}
-              onPointerUp={(e) => {
+              onPointerDown={(e) => {
+                setLocalSliderTime(parseFloat(e.currentTarget.value));
+                setIsDraggingSlider(true);
+              }}
+              onPointerUp={() => {
                 setIsDraggingSlider(false);
-                seekTo(parseFloat(e.currentTarget.value));
+                seekTo(localSliderTime);
               }}
               onChange={(e) => {
-                setLocalSliderTime(parseFloat(e.target.value));
+                const val = parseFloat(e.target.value);
+                setLocalSliderTime(val);
                 if (!isPlaying) {
-                  // If paused, we can scrub and immediately see the prompter update without stuttering audio
-                  seekTo(parseFloat(e.target.value));
+                  // Si está en pausa, podemos mover el slider y ver la actualización instantánea
+                  seekTo(val);
                 }
               }}
               disabled={!audioLoaded}
