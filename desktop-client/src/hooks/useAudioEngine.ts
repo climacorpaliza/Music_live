@@ -657,7 +657,8 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     if (prompterData && prompterData.bpm > 0) {
        const beatsPerMeasure = parseInt(prompterData.timeSignature?.split('/')[0]) || 4;
        const secondsPerBeat = 60 / prompterData.bpm;
-       calculatedPreRoll = (secondsPerBeat * beatsPerMeasure) * 2;
+       // Tope 16s para evitar pre-rolls gigantes por tempo dividido
+       calculatedPreRoll = Math.min((secondsPerBeat * beatsPerMeasure) * 2, 16);
     }
     
     const sampleRate = audioContext.current.sampleRate;
@@ -1012,7 +1013,8 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     if (prompterData && prompterData.bpm > 0) {
        const beatsPerMeasure = parseInt(prompterData.timeSignature?.split('/')[0]) || 4;
        const secondsPerBeat = 60 / prompterData.bpm;
-       calculatedPreRoll = (secondsPerBeat * beatsPerMeasure) * 2;
+       // Tope 16s para evitar pre-rolls gigantes por tempo dividido
+       calculatedPreRoll = Math.min((secondsPerBeat * beatsPerMeasure) * 2, 16);
     }
 
     const sampleRate = audioContext.current.sampleRate;
@@ -1211,7 +1213,8 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     if (prompterData && prompterData.bpm > 0) {
        const beatsPerMeasure = parseInt(prompterData.timeSignature?.split('/')[0]) || 4;
        const secondsPerBeat = 60 / prompterData.bpm;
-       calculatedPreRoll = (secondsPerBeat * beatsPerMeasure) * 2;
+       // Tope 16s para evitar pre-rolls gigantes por tempo dividido
+       calculatedPreRoll = Math.min((secondsPerBeat * beatsPerMeasure) * 2, 16);
     }
 
     const sampleRate = audioContext.current.sampleRate;

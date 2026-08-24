@@ -56,6 +56,17 @@ export default function LiveConcert() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadStatus, setLoadStatus] = useState('');
 
+  // 🎯 Pre-carga silenciosa de la SIGUIENTE canción
+  const nextFohBufferRef = useRef<AudioBuffer | null>(null);
+  const nextCueBufferRef = useRef<AudioBuffer | null>(null);
+  const isPrefetchingRef = useRef(false);
+  // Bandera para auto-play: cuando loadSongAudio termina y esta flag es true, arranca play automático
+  const autoPlayOnLoadRef = useRef(false);
+  // Ref estable de songs para evitar stale closures en callbacks async
+  const songsRef = useRef<any[]>([]);
+  const currentSongIndexRef = useRef<number>(0);
+
+
   useEffect(() => {
     fetchSetlists();
     
@@ -78,12 +89,19 @@ export default function LiveConcert() {
     }
   }, [selectedSetlistId]);
 
+  // Mantener refs estables para evitar stale closures en callbacks async
+  useEffect(() => { songsRef.current = songs; }, [songs]);
+  useEffect(() => { currentSongIndexRef.current = currentSongIndex; }, [currentSongIndex]);
+
   // When song index changes, load the audio automatically
   useEffect(() => {
     if (currentSong) {
-      loadSongAudio(currentSong);
+      // Si venimos de un auto-avance, arrancar play automáticamente al terminar la carga
+      loadSongAudio(currentSong, autoPlayOnLoadRef.current);
+      autoPlayOnLoadRef.current = false; // resetear bandera
     }
   }, [currentSongIndex, currentSong, broadcastEnabled]);
+
 
   useEffect(() => {
     if (masterGainRef.current && audioCtxRef.current) {
@@ -118,7 +136,7 @@ export default function LiveConcert() {
     }
   };
 
-  const loadSongAudio = async (song: any) => {
+  const loadSongAudio = async (song: any, shouldAutoPlay = false) => {
     if (!audioCtxRef.current) return;
     
     // Stop current playback
@@ -126,6 +144,24 @@ export default function LiveConcert() {
     setCurrentTime(-getPreRoll(song)); // Reset clock
     pauseTimeRef.current = 0;
     
+    // ✅ Si la siguiente canción ya fue pre-cargada silenciosamente, usar esos buffers directamente
+    if (nextFohBufferRef.current && nextCueBufferRef.current) {
+      console.log('[LiveConcert] ✅ Usando buffers pre-cargados en silencio.');
+      fohBufferRef.current = nextFohBufferRef.current;
+      cueBufferRef.current = nextCueBufferRef.current;
+      nextFohBufferRef.current = null;
+      nextCueBufferRef.current = null;
+      setTotalDuration(fohBufferRef.current.duration);
+      setLoadStatus('');
+      if (broadcastEnabled) {
+        broadcast({ type: 'LOAD_SONG', songId: song.id, songData: song });
+      }
+      if (shouldAutoPlay) {
+        setTimeout(() => play(), 100);
+      }
+      return;
+    }
+
     fohBufferRef.current = null;
     cueBufferRef.current = null;
     
@@ -157,6 +193,11 @@ export default function LiveConcert() {
       if (broadcastEnabled) {
         broadcast({ type: 'LOAD_SONG', songId: song.id, songData: song });
       }
+
+      // Auto-play si es un avance automático tras fin de canción
+      if (shouldAutoPlay) {
+        setTimeout(() => play(), 100);
+      }
       
     } catch (e: any) {
       console.error(e);
@@ -166,10 +207,47 @@ export default function LiveConcert() {
     }
   };
 
+  /** Pre-carga silenciosa del siguiente track en RAM para transición instantánea */
+  const prefetchNextSong = async (nextSong: any) => {
+    if (!audioCtxRef.current || isPrefetchingRef.current) return;
+    if (!nextSong?.foh_mix_url || !nextSong?.cue_mix_url) return;
+
+    isPrefetchingRef.current = true;
+    console.log('[LiveConcert] 🔄 Pre-cargando silenciosamente:', nextSong.title);
+
+    try {
+      const [fohRes, cueRes] = await Promise.all([
+        fetch(nextSong.foh_mix_url),
+        fetch(nextSong.cue_mix_url),
+      ]);
+      const [fohArray, cueArray] = await Promise.all([
+        fohRes.arrayBuffer(),
+        cueRes.arrayBuffer(),
+      ]);
+      // Sólo guardar si el AudioContext sigue vivo
+      if (!audioCtxRef.current) return;
+      const [fohBuf, cueBuf] = await Promise.all([
+        audioCtxRef.current.decodeAudioData(fohArray),
+        audioCtxRef.current.decodeAudioData(cueArray),
+      ]);
+      nextFohBufferRef.current = fohBuf;
+      nextCueBufferRef.current = cueBuf;
+      console.log('[LiveConcert] ✅ Pre-carga silenciosa completada:', nextSong.title);
+    } catch (e) {
+      console.warn('[LiveConcert] ⚠️ Error en pre-carga silenciosa:', e);
+      nextFohBufferRef.current = null;
+      nextCueBufferRef.current = null;
+    } finally {
+      isPrefetchingRef.current = false;
+    }
+  };
+
   const getPreRoll = (song: any) => {
     if (!song?.prompter_data?.bpm) return 0;
     const beatsPerMeasure = parseInt(song.prompter_data.timeSignature?.split('/')[0]) || 4;
-    return (60 / song.prompter_data.bpm) * beatsPerMeasure * 2;
+    // 🛡️ Tope máximo de 16 segundos para evitar pre-rolls gigantes por tempo dividido
+    const raw = (60 / song.prompter_data.bpm) * beatsPerMeasure * 2;
+    return Math.min(raw, 16);
   };
 
   const buildRoutingGraph = () => {
@@ -285,12 +363,30 @@ export default function LiveConcert() {
     const globalTime = audioCtxRef.current.currentTime - startTimeRef.current;
     const preRoll = getPreRoll(currentSong);
     const visualTime = globalTime - preRoll;
-    
-    // Auto-stop at end
+    const remaining = totalDuration - globalTime;
+
+    // 🎯 Pre-carga silenciosa de la siguiente canción cuando quedan ~30 seg
+    if (remaining <= 30 && remaining > 0) {
+      const idx = currentSongIndexRef.current;
+      const allSongs = songsRef.current;
+      if (idx < allSongs.length - 1) {
+        const next = allSongs[idx + 1];
+        if (next && !nextFohBufferRef.current && !isPrefetchingRef.current) {
+          prefetchNextSong(next);
+        }
+      }
+    }
+
+    // 🏁 Fin de canción: auto-avance al siguiente track con reproducción automática
     if (totalDuration > 0 && globalTime >= totalDuration) {
       pause();
-      // Auto-advance to next song? The user prefers manual start "Alguien tiene que darle play"
-      nextSong();
+      const idx = currentSongIndexRef.current;
+      const allSongs = songsRef.current;
+      if (idx < allSongs.length - 1) {
+        // Marcar que al terminar la carga debe arrancar play
+        autoPlayOnLoadRef.current = true;
+        setCurrentSongIndex(idx + 1);
+      }
       return;
     }
 
