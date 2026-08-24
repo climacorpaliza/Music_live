@@ -1442,7 +1442,7 @@ export const useAudioEngine = (initialStems: StemTrack[]) => {
     onProgress('');
   };
 
-  return {
+  return { masterVolume, setMasterVolume,
     loadStems,
     play,
     pause,
