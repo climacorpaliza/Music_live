@@ -444,114 +444,128 @@ export default function LiveConcert() {
   };
 
   return (
-    <div className="h-screen bg-[#050505] text-white flex flex-col font-sans overflow-hidden">
+    <div className="h-screen bg-[#050505] text-white flex flex-col font-sans overflow-hidden select-none">
       
       {/* HEADER / TRANSPORT */}
-      <header className="h-20 bg-[#111] border-b border-[#222] flex items-center px-6 justify-between shrink-0">
-        <div className="flex items-center space-x-4">
-          <div className="bg-gradient-to-r from-red-600 to-orange-500 text-white font-black px-3 py-1.5 rounded uppercase tracking-widest shadow-lg shadow-red-500/20 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+      <header className="h-[90px] bg-[#09090b]/90 backdrop-blur-xl border-b border-white/5 flex items-center px-8 justify-between shrink-0 z-20">
+        <div className="flex items-center space-x-6">
+          <div className="bg-gradient-to-br from-red-600 to-red-800 text-white font-black px-4 py-2 rounded-xl uppercase tracking-[0.2em] text-xs shadow-[0_0_20px_rgba(220,38,38,0.2)] flex items-center gap-2 border border-red-500/20">
+            <span className="w-2 h-2 rounded-full bg-white animate-pulse shadow-[0_0_8px_white]"></span>
             CONCERT LIVE
           </div>
-          <select 
-            className="bg-[#222] border border-[#333] text-white px-4 py-2 rounded outline-none font-bold text-sm"
-            value={selectedSetlistId || ''}
-            onChange={(e) => setSelectedSetlistId(e.target.value)}
-          >
-            <option value="">Cargar Setlist...</option>
-            {setlists.map(sl => (
-              <option key={sl.id} value={sl.id}>{sl.title}</option>
-            ))}
-          </select>
+          <div className="relative">
+            <select 
+              className="appearance-none bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 text-white px-5 py-2.5 pr-10 rounded-xl outline-none font-bold text-sm transition-colors cursor-pointer"
+              value={selectedSetlistId || ''}
+              onChange={(e) => setSelectedSetlistId(e.target.value)}
+            >
+              <option value="" className="bg-[#111]">Cargar Setlist...</option>
+              {setlists.map(sl => (
+                <option key={sl.id} value={sl.id} className="bg-[#111]">{sl.title}</option>
+              ))}
+            </select>
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
+              ▼
+            </div>
+          </div>
         </div>
 
         {/* Transport Controls */}
-        <div className="flex flex-col items-center flex-1 max-w-2xl px-8">
-          <div className="flex items-baseline space-x-2 mb-1">
-            <span className="text-4xl font-mono font-bold text-white tracking-wider">
+        <div className="flex flex-col items-center flex-1 max-w-[800px] px-10">
+          <div className="flex items-baseline space-x-2 mb-1.5">
+            <span className="text-[40px] leading-none font-mono font-bold text-white tracking-widest drop-shadow-md">
               {formatTime(currentTime)}
             </span>
           </div>
           
-          <div className="w-full flex items-center space-x-3 mt-1">
-              <input 
-                type="range" 
-                min={-(getPreRoll(currentSong) || 0)} 
-                max={totalDuration - getPreRoll(currentSong) || 100} 
-                step="0.1" 
-                value={isDraggingSlider ? localSliderTime : currentTime}
-                onPointerDown={() => setIsDraggingSlider(true)}
-                onPointerUp={(e) => {
-                  setIsDraggingSlider(false);
-                  seekTo(parseFloat(e.currentTarget.value));
-                }}
-                onChange={(e) => {
-                  setLocalSliderTime(parseFloat(e.target.value));
-                  if (!isPlaying) {
-                    seekTo(parseFloat(e.target.value));
-                  }
-                }}
+          <div className="w-full flex items-center space-x-3 group">
+            <input 
+              type="range" 
+              min={-(getPreRoll(currentSong) || 0)} 
+              max={totalDuration - getPreRoll(currentSong) || 100} 
+              step="0.1" 
+              value={isDraggingSlider ? localSliderTime : currentTime}
+              onPointerDown={() => setIsDraggingSlider(true)}
+              onPointerUp={(e) => {
+                setIsDraggingSlider(false);
+                seekTo(parseFloat(e.currentTarget.value));
+              }}
+              onChange={(e) => {
+                setLocalSliderTime(parseFloat(e.target.value));
+                if (!isPlaying) {
+                  seekTo(parseFloat(e.target.value));
+                }
+              }}
               disabled={isLoading || !currentSong}
-              className="flex-1 h-2 bg-[#222] rounded-lg appearance-none cursor-pointer disabled:opacity-50"
+              className="flex-1 h-2 bg-[#222] rounded-full appearance-none cursor-pointer disabled:opacity-30 group-hover:h-3 transition-all duration-200"
               style={{
                 background: currentSong && totalDuration > 0
-                  ? `linear-gradient(to right, #ef4444 ${((currentTime + getPreRoll(currentSong)) / totalDuration) * 100}%, #222 ${((currentTime + getPreRoll(currentSong)) / totalDuration) * 100}%)`
-                  : '#222'
+                  ? `linear-gradient(to right, #ef4444 ${((currentTime + getPreRoll(currentSong)) / totalDuration) * 100}%, rgba(255,255,255,0.05) ${((currentTime + getPreRoll(currentSong)) / totalDuration) * 100}%)`
+                  : 'rgba(255,255,255,0.05)'
               }}
             />
           </div>
         </div>
 
-        <div className="flex items-center space-x-6">
+        <div className="flex items-center space-x-4">
           {/* Network Broadcast Toggle */}
-          <div className={`flex items-center space-x-3 p-2 rounded-lg border transition ${
-            broadcastEnabled ? 'bg-blue-600/20 border-blue-500/50' : 'bg-[#1A1A1A] border-[#333]'
-          }`}>
-            <Wifi size={20} className={broadcastEnabled ? 'text-blue-400' : 'text-gray-400'} />
-            <div className="flex flex-col cursor-pointer" onClick={() => setBroadcastEnabled(!broadcastEnabled)}>
-              <span className={`text-[10px] font-bold uppercase tracking-wider ${broadcastEnabled ? 'text-blue-400' : 'text-gray-500'}`}>
+          <div 
+            onClick={() => setBroadcastEnabled(!broadcastEnabled)}
+            className={`pressable flex items-center space-x-3 px-4 py-2.5 rounded-xl border transition-all duration-300 cursor-pointer ${
+              broadcastEnabled 
+                ? 'bg-blue-600/10 border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.1)]' 
+                : 'bg-white/[0.02] border-white/10 hover:bg-white/[0.04]'
+            }`}
+          >
+            <div className={`p-2 rounded-lg ${broadcastEnabled ? 'bg-blue-500/20' : 'bg-white/5'}`}>
+              <Wifi size={18} className={broadcastEnabled ? 'text-blue-400' : 'text-gray-400'} />
+            </div>
+            <div className="flex flex-col">
+              <span className={`text-[9px] font-bold uppercase tracking-widest ${broadcastEnabled ? 'text-blue-400' : 'text-gray-500'}`}>
                 In-Ears Móviles
               </span>
-              <span className="text-sm font-semibold text-white">
+              <span className="text-sm font-semibold text-gray-200">
                 {broadcastEnabled ? 'Transmitiendo' : 'Desactivado'}
               </span>
             </div>
             {broadcastEnabled && (
-              <div className="flex items-center ml-2 text-xs font-bold bg-blue-500/30 text-blue-300 px-2 py-1 rounded-full" title="Músicos conectados">
-                <Users size={12} className="mr-1" /> {connections}
+              <div className="flex items-center ml-2 text-[10px] font-bold bg-blue-500/20 text-blue-300 px-2.5 py-1 rounded-full border border-blue-500/20">
+                <Users size={12} className="mr-1.5" /> {connections}
               </div>
             )}
           </div>
 
            {/* Routing Mode */}
-          <div className="flex items-center space-x-3 bg-[#1A1A1A] p-2 rounded-lg border border-[#333]">
-            <MonitorSpeaker size={20} className="text-gray-400" />
+          <div className="flex items-center space-x-3 bg-white/[0.02] hover:bg-white/[0.04] px-4 py-2.5 rounded-xl border border-white/10 transition-colors">
+            <div className="p-2 bg-white/5 rounded-lg">
+              <MonitorSpeaker size={18} className="text-gray-400" />
+            </div>
             <div className="flex flex-col">
-              <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Modo Salida</span>
+              <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Modo Salida</span>
               <select 
-                className="bg-transparent text-sm font-semibold outline-none text-white appearance-none cursor-pointer"
+                className="bg-transparent text-sm font-semibold outline-none text-gray-200 appearance-none cursor-pointer"
                 value={routingMode}
                 onChange={(e) => setRoutingMode(e.target.value as 'StereoSplit' | 'MultiChannel')}
               >
-                <option value="StereoSplit">Stereo Split (L:Cues R:FOH)</option>
-                <option value="MultiChannel">Interfaz USB (Multi)</option>
+                <option value="StereoSplit" className="bg-[#111]">Stereo Split (L:Cues R:FOH)</option>
+                <option value="MultiChannel" className="bg-[#111]">Interfaz USB (Multi)</option>
               </select>
             </div>
           </div>
           
           {/* Master Volume */}
-          <div className="flex items-center space-x-3 bg-[#1A1A1A] p-2 rounded-lg border border-[#333] w-48">
+          <div className="flex items-center space-x-3 bg-white/[0.02] px-4 py-2.5 rounded-xl border border-white/10 w-44">
             <div className="flex flex-col w-full">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Volumen Master</span>
-                <span className="text-[10px] font-bold text-white">{Math.round(masterVolume * 100)}%</span>
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Master</span>
+                <span className="text-[10px] font-bold text-gray-300">{Math.round(masterVolume * 100)}%</span>
               </div>
               <input 
                 type="range" 
                 min="0" max="1.5" step="0.01" 
                 value={masterVolume} 
                 onChange={(e) => setMasterVolume(parseFloat(e.target.value))}
-                className="w-full h-1.5 bg-[#333] rounded-lg appearance-none cursor-pointer"
+                className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer hover:h-2 transition-all"
               />
             </div>
           </div>
@@ -563,83 +577,89 @@ export default function LiveConcert() {
         
         {/* Loading Overlay */}
         {isLoading && (
-          <div className="absolute inset-0 bg-black/80 z-40 flex flex-col items-center justify-center backdrop-blur-md">
+          <div className="absolute inset-0 bg-black/80 z-40 flex flex-col items-center justify-center backdrop-blur-xl">
             <div className="w-12 h-12 border-4 border-red-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-            <h2 className="text-xl font-bold text-white mb-2">{currentSong?.title}</h2>
-            <p className="text-gray-400 font-mono text-sm">{loadStatus}</p>
+            <h2 className="text-xl font-bold text-white mb-2 tracking-tight">{currentSong?.title}</h2>
+            <p className="text-gray-400 font-mono text-sm uppercase tracking-widest">{loadStatus}</p>
           </div>
         )}
 
         {/* SETLIST SIDEBAR */}
-        <div className="w-80 bg-[#0A0A0A] border-r border-[#222] flex flex-col z-10">
-          <div className="p-4 border-b border-[#222] bg-[#111]">
-            <h2 className="font-bold flex items-center text-gray-300"><LayoutList size={18} className="mr-2 text-red-500" /> Setlist Oficial</h2>
+        <div className="w-80 bg-[#09090b]/80 backdrop-blur-md border-r border-white/5 flex flex-col z-10">
+          <div className="px-6 py-5 border-b border-white/5 bg-white/[0.02]">
+            <h2 className="font-bold flex items-center text-gray-200 text-sm uppercase tracking-widest">
+              <LayoutList size={16} className="mr-3 text-red-500" /> Setlist Oficial
+            </h2>
           </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          
+          <div className="flex-1 overflow-y-auto p-3 space-y-1.5 custom-scrollbar">
             {songs.map((s, idx) => (
               <div 
                 key={idx}
                 onClick={() => setCurrentSongIndex(idx)}
-                className={`p-3 rounded-lg flex items-center cursor-pointer transition ${
+                className={`pressable p-3 rounded-xl flex items-center cursor-pointer transition-all duration-300 ${
                   idx === currentSongIndex 
-                    ? 'bg-red-600/20 border border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]' 
-                    : 'hover:bg-white/5 border border-transparent'
+                    ? 'bg-gradient-to-r from-red-600/20 to-red-900/10 border border-red-500/30 shadow-[0_0_20px_rgba(239,68,68,0.1)]' 
+                    : 'bg-white/[0.02] border border-transparent hover:bg-white/[0.04] hover:border-white/5'
                 }`}
               >
-                <div className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold mr-3 ${idx === currentSongIndex ? 'bg-red-500 text-white' : 'bg-[#222] text-gray-500'}`}>
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold mr-3 shrink-0 ${idx === currentSongIndex ? 'bg-red-500 text-white shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'bg-white/5 text-gray-500'}`}>
                   {idx + 1}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className={`font-bold truncate ${idx === currentSongIndex ? 'text-white' : 'text-gray-400'}`}>{s.title}</p>
-                  {(!s.foh_mix_url || !s.cue_mix_url) && <p className="text-[10px] text-red-400 font-bold uppercase mt-1">Audio No Disponible</p>}
+                  <p className={`font-semibold truncate text-[14px] ${idx === currentSongIndex ? 'text-white' : 'text-gray-300'}`}>{s.title}</p>
+                  {(!s.foh_mix_url || !s.cue_mix_url) && <p className="text-[9px] text-red-400/80 font-bold uppercase mt-1 tracking-wider">Audio No Disponible</p>}
                 </div>
-                {idx === currentSongIndex && isPlaying && <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>}
+                {idx === currentSongIndex && isPlaying && <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_red] animate-pulse ml-2 shrink-0"></div>}
               </div>
             ))}
             {songs.length === 0 && (
-              <div className="text-center text-gray-600 py-10 px-4 text-sm font-medium">
+              <div className="text-center text-gray-500 py-12 px-6 text-sm font-medium blur-transition">
                 Selecciona un setlist arriba para comenzar.
               </div>
             )}
           </div>
 
           {/* LARGE TRANSPORT BUTTONS */}
-          <div className="p-4 bg-[#111] border-t border-[#222] grid grid-cols-3 gap-2">
-            <button onClick={prevSong} disabled={currentSongIndex === 0} className="bg-[#222] hover:bg-[#333] disabled:opacity-30 rounded-lg flex items-center justify-center py-4 transition">
-              <SkipBack size={24} />
+          <div className="p-5 bg-white/[0.02] border-t border-white/5 grid grid-cols-3 gap-3">
+            <button onClick={prevSong} disabled={currentSongIndex === 0} className="pressable bg-white/5 hover:bg-white/10 disabled:opacity-30 rounded-xl flex items-center justify-center py-4 transition-colors">
+              <SkipBack size={22} className="text-gray-300" />
             </button>
-            <button onClick={stop} disabled={!currentSong} className="bg-[#222] hover:bg-[#333] disabled:opacity-30 rounded-lg flex items-center justify-center py-4 transition text-gray-400">
-              <Square size={24} fill="currentColor" />
+            <button onClick={stop} disabled={!currentSong} className="pressable bg-white/5 hover:bg-white/10 disabled:opacity-30 rounded-xl flex items-center justify-center py-4 transition-colors">
+              <Square size={20} fill="currentColor" className="text-gray-400" />
             </button>
-            <button onClick={nextSong} disabled={currentSongIndex === songs.length - 1} className="bg-[#222] hover:bg-[#333] disabled:opacity-30 rounded-lg flex items-center justify-center py-4 transition">
-              <SkipForward size={24} />
+            <button onClick={nextSong} disabled={currentSongIndex === songs.length - 1} className="pressable bg-white/5 hover:bg-white/10 disabled:opacity-30 rounded-xl flex items-center justify-center py-4 transition-colors">
+              <SkipForward size={22} className="text-gray-300" />
             </button>
             
             <button 
               onClick={isPlaying ? pause : play} 
               disabled={isLoading || !currentSong || !currentSong.foh_mix_url}
-              className={`col-span-3 py-6 rounded-xl flex items-center justify-center text-2xl font-black transition ${
+              className={`pressable col-span-3 py-5 rounded-xl flex items-center justify-center text-xl font-black transition-all duration-300 tracking-wider ${
                 isPlaying 
-                ? 'bg-white text-black shadow-[0_0_30px_rgba(255,255,255,0.3)] hover:bg-gray-200' 
-                : 'bg-red-600 text-white hover:bg-red-500 shadow-[0_0_30px_rgba(239,68,68,0.3)]'
+                ? 'bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:bg-gray-100' 
+                : 'bg-red-600 text-white hover:bg-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]'
               } disabled:opacity-30 disabled:shadow-none`}
             >
-              {isPlaying ? <Pause size={32} fill="currentColor" className="mr-2" /> : <Play size={32} fill="currentColor" className="mr-2" />}
+              {isPlaying ? <Pause size={28} fill="currentColor" className="mr-3" /> : <Play size={28} fill="currentColor" className="mr-3 ml-2" />}
               {isPlaying ? 'PAUSA' : 'REPRODUCIR'}
             </button>
           </div>
         </div>
 
         {/* PROMPTER AREA */}
-        <div className="flex-1 bg-black flex flex-col relative">
+        <div className="flex-1 bg-black flex flex-col relative overflow-hidden">
           <div className="flex-1 p-8 overflow-hidden flex flex-col relative">
-            {/* Background Logo / Glow */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-5">
+            {/* Background Glow */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-red-900/10 rounded-full blur-[120px] pointer-events-none opacity-50"></div>
+            
+            {/* Background Logo */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02]">
               <Music size={400} />
             </div>
 
             {currentSong ? (
-              <div className="h-full relative z-10">
+              <div className="h-full relative z-10 w-full max-w-7xl mx-auto rounded-3xl overflow-hidden border border-white/5 shadow-2xl bg-[#09090b]/80 backdrop-blur-sm">
                 <Prompter 
                   currentTime={currentTime}
                   bpm={currentSong.prompter_data?.bpm || 0}
@@ -653,8 +673,8 @@ export default function LiveConcert() {
                 />
               </div>
             ) : (
-              <div className="h-full flex items-center justify-center text-gray-600 text-xl font-bold">
-                MÚSICA DETENIDA
+              <div className="h-full flex items-center justify-center text-gray-500/50 text-2xl font-bold tracking-[0.5em] blur-transition">
+                EN ESPERA
               </div>
             )}
           </div>

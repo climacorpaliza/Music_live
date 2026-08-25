@@ -1,0 +1,78 @@
+﻿/* Emil Kowalski & pbakaus Design Engineering Core */
+
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+@keyframes enterList {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.anim-enter {
+  opacity: 0;
+  animation: enterList 350ms var(--ease-out) forwards;
+}
+
+/* Base button and interactive element scale */
+.pressable {
+  transition: transform 160ms var(--ease-out), background-color 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+  will-change: transform;
+}
+
+.pressable:active {
+  transform: scale(0.97);
+}
+
+/* Subtle crossfade blur trick for smooth state changes */
+.blur-transition {
+  transition: filter 250ms ease, opacity 250ms ease;
+}
+.blur-transition-entering {
+  filter: blur(4px);
+  opacity: 0.6;
+}
+
+/* Custom scrollbar for absolute polish */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+.custom-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Card surfaces */
+.premium-card {
+  background: linear-gradient(180deg, rgba(30, 30, 32, 0.8) 0%, rgba(20, 20, 22, 0.9) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  border-radius: 20px;
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+  border-radius: 16px;
+}
+
+.ai-glass-panel {
+  background: linear-gradient(135deg, rgba(88, 28, 135, 0.15) 0%, rgba(0, 0, 0, 0.2) 100%);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  box-shadow: 0 12px 40px rgba(88, 28, 135, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
