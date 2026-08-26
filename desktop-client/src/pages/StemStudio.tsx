@@ -290,11 +290,17 @@ export default function StemStudio() {
               if (typeof url !== 'string' || !url.startsWith('http')) continue;
               
               let stemName = `Stem ${i}`;
+              let isMasterFlag = false;
+              
               if (url.includes('bass')) stemName = 'Bass';
               else if (url.includes('drums')) stemName = 'Drums';
               else if (url.includes('other')) stemName = 'Other';
               else if (url.includes('vocals')) stemName = 'Vocals';
-              else continue; // Ignorar instrum.wav, instrum2.wav, etc. para evitar pistas vacías/repetidas
+              else if (url.includes('instrum') && !url.includes('instrum2')) {
+                 stemName = 'Mezcla Master';
+                 isMasterFlag = true;
+              }
+              else continue; // Ignorar instrum2.wav o json
               
               // Evitar error de CORS o fallos silenciosos
               const fetchRes = await fetch(url);
@@ -314,7 +320,7 @@ export default function StemStudio() {
                 name: stemName,
                 file_url: finalUrl.publicUrl,
                 type: 'Audio',
-                metadata: { original_name: `${stemName}.wav`, format: 'audio/wav', is_master: false }
+                metadata: { original_name: `${stemName}.wav`, format: 'audio/wav', is_master: isMasterFlag }
               });
             }
 
