@@ -13,20 +13,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { songId, stems } = req.body;
+    const { songId, stems, ghostUrl } = req.body;
     
     if (!songId) return res.status(400).json({ error: 'Falta songId' });
     if (!stems || stems.length === 0) return res.status(404).json({ error: 'No stems' });
 
-    // 1. Preferir siempre la pista Maestra (Master) porque contiene todos los instrumentos (ideal para silencios de batería)
-    let selectedStem = stems.find((s: any) => s.metadata && s.metadata.is_master === true);
-    // 2. Fallback a batería o metrónomo si no hay master
-    if (!selectedStem) selectedStem = stems.find((s: any) => s.name.toLowerCase().includes('drum') || s.name.toLowerCase().includes('bateria'));
-    if (!selectedStem) selectedStem = stems.find((s: any) => s.name.toLowerCase().includes('click') || s.name.toLowerCase().includes('metronomo'));
-    // 3. Último recurso, cualquier pista
-    if (!selectedStem) selectedStem = stems[0];
+    let finalAudioUrl = ghostUrl;
 
-    console.log(`[IA-Beats] Iniciando Replicate Async... Stem: ${selectedStem.name}`);
+    if (!finalAudioUrl) {
+      // 1. Preferir siempre la pista Maestra (Master) porque contiene todos los instrumentos
+      let selectedStem = stems.find((s: any) => s.metadata && s.metadata.is_master === true);
+      // 2. Fallback a batería o metrónomo si no hay master
+      if (!selectedStem) selectedStem = stems.find((s: any) => s.name.toLowerCase().includes('drum') || s.name.toLowerCase().includes('bateria'));
+      if (!selectedStem) selectedStem = stems.find((s: any) => s.name.toLowerCase().includes('click') || s.name.toLowerCase().includes('metronomo'));
+      // 3. Último recurso, cualquier pista
+      if (!selectedStem) selectedStem = stems[0];
+      finalAudioUrl = selectedStem.file_url || selectedStem.url;
+      console.log(`[IA-Beats] Iniciando Replicate Async... Stem: ${selectedStem.name}`);
+    } else {
+      console.log(`[IA-Beats] Iniciando Replicate Async con Ghost Mix... URL: ${finalAudioUrl}`);
+    }
 
     // Call Sakemin All-In-One model with retry logic for 502/503 errors
     let prediction;
@@ -36,7 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         prediction = await replicate.predictions.create({
           version: "001b4137be6ac67bdc28cb5cffacf128b874f530258d033de23121e785cb7290", 
           input: {
-            music_input: selectedStem.file_url || selectedStem.url,
+            music_input: finalAudioUrl,
             include_embeddings: false,
             include_activations: false,
             model: "harmonix-all"

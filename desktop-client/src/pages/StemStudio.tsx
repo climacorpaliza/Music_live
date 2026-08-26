@@ -190,8 +190,6 @@ export default function StemStudio() {
     }
   };
 
-
-
   const deleteStem = async (stemId: string) => {
     if (!confirm('¿Estás seguro de que quieres eliminar esta pista?')) return;
     
@@ -318,50 +316,50 @@ export default function StemStudio() {
   };
 
   return (
-    <div className="h-full flex flex-col p-10 bg-[#09090b] overflow-y-auto custom-scrollbar">
-      <div className="mb-10 flex items-center justify-between anim-enter" style={{ animationDelay: '0ms' }}>
-        <div>
-          <h1 className="text-4xl font-extrabold text-white mb-2 flex items-center gap-3 tracking-tight">
-            <Disc3 className="text-blue-500" size={36} strokeWidth={2.5} />
-            Stem Studio
-          </h1>
-          <p className="text-gray-400 text-base font-medium">Librería maestra. Sube, organiza y procesa tus multi-tracks.</p>
+    <div className="h-full flex flex-col bg-[#111113] overflow-hidden text-zinc-300 select-none">
+      {/* Header - DAW Style */}
+      <div className="flex items-center justify-between px-4 py-3 bg-[#18181b] border-b border-zinc-800 shrink-0">
+        <div className="flex items-center gap-3">
+          <Disc3 className="text-emerald-500" size={18} strokeWidth={2.5} />
+          <h1 className="text-xs font-bold text-zinc-200 tracking-widest uppercase">Stem Studio</h1>
+        </div>
+        <div className="text-[10px] font-bold tracking-widest uppercase text-zinc-500">
+          Master Library
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Panel Izquierdo: Selección de Canción */}
-        <div className="col-span-1 premium-card p-6 h-fit anim-enter" style={{ animationDelay: '50ms' }}>
-          <h2 className="text-lg font-bold text-white mb-5 flex items-center gap-2 tracking-wide uppercase text-xs opacity-80">
-            <Music size={16} className="text-blue-400" />
-            Librería de Canciones
-          </h2>
+      {/* Main Workspace */}
+      <div className="flex flex-1 overflow-hidden">
+        
+        {/* Sidebar - Project/Song Browser */}
+        <div className="w-72 flex flex-col bg-[#09090b] border-r border-zinc-800 shrink-0 z-10">
+          <div className="px-4 py-2 border-b border-zinc-800 bg-[#121214] flex items-center gap-2 shrink-0">
+            <Music size={12} className="text-zinc-500" />
+            <h2 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Projects</h2>
+          </div>
           
-          <div className="space-y-1.5 max-h-[600px] overflow-y-auto pr-3 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-0.5">
             {loadingSongs ? (
-              <div className="flex items-center gap-2 text-gray-500 p-4">
-                <Loader2 size={16} className="animate-spin" />
-                <span className="text-sm font-medium">Cargando catálogo...</span>
+              <div className="flex items-center gap-2 text-zinc-500 p-3">
+                <Loader2 size={12} className="animate-spin" />
+                <span className="text-xs">Loading...</span>
               </div>
             ) : songs.length === 0 ? (
-              <p className="text-gray-500 text-sm p-4 bg-white/[0.02] rounded-lg border border-white/5">
-                No hay canciones. Sube un ZIP para crear una.
-              </p>
+              <p className="text-zinc-600 text-xs p-3">No projects found.</p>
             ) : (
-              songs.map((song, i) => (
+              songs.map((song) => (
                 <button
                   key={song.id}
                   onClick={() => setSelectedSongId(song.id)}
-                  className={`pressable w-full text-left px-4 py-3 rounded-xl flex items-center justify-between group anim-enter ${
+                  className={`w-full text-left px-3 py-2 flex items-center justify-between rounded text-xs transition-colors ${
                     selectedSongId === song.id 
-                      ? 'bg-blue-600/15 text-blue-300 border border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.15)]' 
-                      : 'text-gray-300 bg-transparent hover:bg-white/[0.04] border border-transparent hover:border-white/5'
+                      ? 'bg-zinc-800 text-zinc-100 font-medium' 
+                      : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
                   }`}
-                  style={{ animationDelay: `${(i * 30) + 100}ms` }}
                 >
-                  <div className="font-semibold truncate text-[15px]">{song.title}</div>
+                  <div className="truncate pr-2">{song.title}</div>
                   {selectedSongId === song.id && (
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.8)]" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
                   )}
                 </button>
               ))
@@ -369,182 +367,168 @@ export default function StemStudio() {
           </div>
         </div>
 
-        {/* Panel Derecho: Detalles de la Canción y Uploader */}
-        <div className="col-span-1 lg:col-span-2 space-y-8">
-          
-          {/* Uploader Section */}
-          <div className="premium-card p-8 anim-enter" style={{ animationDelay: '100ms' }}>
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold text-white flex items-center gap-3 tracking-tight">
-                <FolderPlus size={24} className="text-blue-400" />
-                Cargar Archivos
-              </h2>
-              {selectedSongId ? (
-                <p className="text-sm text-gray-400 mt-2">
-                  Sube pistas individuales a la canción seleccionada, o arrastra un ZIP para crear una nueva carpeta.
-                </p>
-              ) : (
-                <p className="text-sm text-yellow-500/90 mt-2 font-medium bg-yellow-500/10 p-3 rounded-lg border border-yellow-500/20 inline-block">
-                  Selecciona una canción a la izquierda, o sube un archivo .ZIP para crear una nueva automáticamente.
-                </p>
-              )}
-            </div>
-
-            <div className="blur-transition" style={{ opacity: selectedSongId ? 1 : 0.6 }}>
-              <StemUploader 
-                songId={selectedSongId}
-                bandId={FAKE_BAND_ID}
-                onUploadComplete={handleUploadComplete}
-              />
-            </div>
-
-            {selectedSongId && (
-              <div className="mt-6 p-5 border border-blue-500/20 bg-blue-900/10 rounded-xl relative overflow-hidden group hover:border-blue-500/40 transition-colors pressable">
-                <input 
-                  type="file" 
-                  accept="audio/mpeg, audio/wav, audio/mp3" 
-                  onChange={handleSplitMP3}
-                  disabled={isSplitting}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col overflow-y-auto bg-[#141417] custom-scrollbar relative">
+          {!selectedSongId ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-zinc-600">
+              <FolderPlus size={48} className="mb-4 opacity-20" strokeWidth={1} />
+              <p className="text-sm font-medium text-zinc-400">Select a project to view stems</p>
+              <p className="text-xs mt-1 opacity-70">or upload a .ZIP to create a new one.</p>
+              <div className="mt-8 w-80">
+                <StemUploader 
+                  songId={selectedSongId}
+                  bandId={FAKE_BAND_ID}
+                  onUploadComplete={handleUploadComplete}
                 />
-                <div className="flex items-center justify-between pointer-events-none relative z-0">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-blue-500/20 rounded-lg group-hover:scale-110 transition-transform duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]">
-                      <Sparkles className="text-blue-400" size={24} />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-blue-100 text-base">Separar Pistas con IA</h4>
-                      <p className="text-sm text-blue-300/70 mt-0.5">
-                        {isSplitting 
-                          ? splitMessage 
-                          : "Sube un MP3 para extraer Batería, Bajo, Voces y Otros."}
-                      </p>
-                    </div>
-                  </div>
-                  {isSplitting ? (
-                    <RefreshCw className="text-blue-400 animate-spin" size={24} />
-                  ) : (
-                    <div className="px-4 py-2 bg-blue-600 group-hover:bg-blue-500 text-white text-sm font-bold rounded-lg shadow-lg pointer-events-auto transition-colors">
-                      Subir MP3
-                    </div>
-                  )}
-                </div>
               </div>
-            )}
-          </div>
-
-          {/* AI Intelligence Section */}
-          {selectedSongId && (
-            <div className="ai-glass-panel p-8 rounded-2xl relative overflow-hidden anim-enter" style={{ animationDelay: '150ms' }}>
-              <div className="absolute top-0 right-0 w-48 h-48 bg-purple-600/20 rounded-full blur-[60px] -mr-10 -mt-10 pointer-events-none"></div>
+            </div>
+          ) : (
+            <div className="p-6 space-y-6 max-w-6xl mx-auto w-full">
               
-              <h4 className="text-lg font-bold text-gray-100 mb-6 flex items-center tracking-tight">
-                <span className="w-2.5 h-2.5 rounded-full bg-purple-500 mr-3 shadow-[0_0_12px_rgba(168,85,247,0.9)] animate-pulse"></span>
-                Inteligencia Artificial (Tempo y Rejilla)
-              </h4>
-              
-              <div className="space-y-5 relative z-10">
-                <div className="flex space-x-4">
-                  <div className="flex-1">
-                    <label className="text-[11px] text-gray-400 font-bold uppercase tracking-widest mb-1.5 block">Compás</label>
-                    <select value={timeSignature} onChange={(e) => setTimeSignature(e.target.value)} className="w-full bg-[#09090b] border border-white/10 rounded-lg px-4 py-3 text-sm text-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none transition-all">
-                      <option value="4/4">4/4 (Estándar)</option>
-                      <option value="3/4">3/4 (Vals)</option>
-                      <option value="6/8">6/8 (Balada)</option>
-                    </select>
+              {/* Top Controls Toolbar */}
+              <div className="flex flex-col xl:flex-row gap-4 shrink-0">
+                
+                {/* Uploader / Adder */}
+                <div className="flex-1 bg-[#1a1a1e] border border-zinc-800/80 rounded-lg p-4 flex flex-col gap-4">
+                  <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/50">
+                    <FolderPlus size={14} className="text-emerald-500" />
+                    <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Add Audio Files</h3>
                   </div>
-                  <div className="flex-1">
-                    <label className="text-[11px] text-gray-400 font-bold uppercase tracking-widest mb-1.5 block">Clave (Opcional)</label>
-                    <input type="text" value={manualKey} onChange={(e) => setManualKey(e.target.value)} placeholder="Ej: Bb Major" className="w-full bg-[#09090b] border border-white/10 rounded-lg px-4 py-3 text-sm text-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none transition-all placeholder:text-gray-600" />
+                  
+                  <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                    <div className="text-xs w-full h-[40px] flex items-center justify-center border border-zinc-700 hover:border-zinc-500 bg-[#202025] rounded transition-colors">
+                       <StemUploader 
+                          songId={selectedSongId}
+                          bandId={FAKE_BAND_ID}
+                          onUploadComplete={handleUploadComplete}
+                        />
+                    </div>
+                    
+                    <div className="relative h-[40px] group bg-[#202025] border border-zinc-700 hover:border-emerald-500/50 rounded flex items-center justify-between px-3 cursor-pointer transition-colors overflow-hidden">
+                      <input 
+                        type="file" 
+                        accept="audio/mpeg, audio/wav, audio/mp3" 
+                        onChange={handleSplitMP3}
+                        disabled={isSplitting}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
+                      />
+                      <div className="flex items-center gap-2 pointer-events-none z-0">
+                        {isSplitting ? <RefreshCw size={14} className="animate-spin text-emerald-400" /> : <Sparkles size={14} className="text-emerald-400" />}
+                        <span className="text-xs font-semibold text-zinc-300">
+                          {isSplitting ? splitMessage : "AI Stem Splitter (MP3)"}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                
-                <button 
-                  onClick={handleGenerateChordsAI}
-                  disabled={!selectedSongId || isGeneratingAI || stems.length === 0}
-                  className="pressable w-full bg-purple-600 hover:bg-purple-500 text-white p-4 rounded-xl font-bold text-base shadow-[0_0_20px_rgba(147,51,234,0.3)] flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed group"
-                >
-                  {isGeneratingAI ? <RefreshCw className="animate-spin mr-3" size={20} /> : <Sparkles className="mr-3 group-hover:scale-110 transition-transform duration-300" size={20} />}
-                  {isGeneratingAI ? "Analizando Tempo..." : "✨ Detectar Tempo y Grilla"}
-                </button>
-                
-                <div className="blur-transition" style={{ opacity: 1 }}>
-                  {aiSuccessMessage ? (
-                    <p className="text-sm text-green-400 font-medium leading-tight flex items-center bg-green-900/20 p-4 rounded-xl border border-green-500/20">
-                      <CheckCircle size={18} className="mr-3 shrink-0" />
-                      {aiSuccessMessage}
-                    </p>
-                  ) : (
-                    <div>
-                      <p className="text-xs text-gray-400 leading-relaxed mb-3">
-                        El motor AI detectará automáticamente el BPM y la cuadrícula rítmica con precisión de milisegundos, optimizándolo para el Live Prompter.
-                      </p>
 
+                {/* AI Tempo & Grid Module */}
+                <div className="flex-1 bg-[#1a1a1e] border border-zinc-800/80 rounded-lg p-4 flex flex-col gap-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-zinc-800/50">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
+                      <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Global Grid & Tempo</h3>
+                    </div>
                     {songs.find(s => s.id === selectedSongId)?.prompter_data?.lastAiDetection && (
-                      <div className="flex items-center text-xs text-purple-300 bg-purple-900/20 p-2 rounded border border-purple-500/20">
-                        <CheckCircle size={14} className="mr-2" />
-                        Última detección exitosa: {songs.find(s => s.id === selectedSongId)?.prompter_data?.lastAiDetection}
-                      </div>
+                       <div className="flex items-center gap-1 text-[9px] text-zinc-500 uppercase tracking-wider">
+                         <CheckCircle size={10} className="text-zinc-600" /> Synced
+                       </div>
                     )}
+                  </div>
+                  
+                  <div className="flex gap-3">
+                    <div className="flex-1 flex flex-col gap-1.5">
+                      <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Signature</label>
+                      <select value={timeSignature} onChange={(e) => setTimeSignature(e.target.value)} className="h-[32px] bg-[#09090b] border border-zinc-800 rounded text-xs text-zinc-300 px-2 focus:border-purple-500 focus:outline-none">
+                        <option value="4/4">4/4</option>
+                        <option value="3/4">3/4</option>
+                        <option value="6/8">6/8</option>
+                      </select>
+                    </div>
+                    <div className="flex-1 flex flex-col gap-1.5">
+                      <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Key (Optional)</label>
+                      <input type="text" value={manualKey} onChange={(e) => setManualKey(e.target.value)} placeholder="e.g. Bb Maj" className="h-[32px] bg-[#09090b] border border-zinc-800 rounded text-xs text-zinc-300 px-2 focus:border-purple-500 focus:outline-none placeholder:text-zinc-700" />
+                    </div>
+                  </div>
+                  
+                  <button 
+                    onClick={handleGenerateChordsAI}
+                    disabled={isGeneratingAI || stems.length === 0}
+                    className="w-full h-[32px] bg-purple-600/10 hover:bg-purple-600/20 border border-purple-500/30 text-purple-400 text-xs font-bold rounded flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
+                  >
+                    {isGeneratingAI ? <RefreshCw className="animate-spin" size={14} /> : null}
+                    {isGeneratingAI ? "Analyzing..." : "Auto-Detect Tempo"}
+                  </button>
+                  {aiSuccessMessage && <div className="text-[10px] text-green-400 bg-green-900/10 px-2 py-1.5 rounded border border-green-900/30 truncate">{aiSuccessMessage}</div>}
+                </div>
+
+              </div>
+
+              {/* Tracks / Stems Section (DAW Style) */}
+              <div className="flex flex-col bg-[#09090b] border border-zinc-800/80 rounded-lg overflow-hidden shrink-0 shadow-2xl">
+                {/* Tracks Header */}
+                <div className="flex items-center px-4 py-2 bg-[#121214] border-b border-zinc-800">
+                   <div className="w-[240px] text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Track Name</div>
+                   <div className="flex-1 text-[10px] font-bold text-zinc-500 uppercase tracking-widest pl-4">Waveform</div>
+                   <div className="w-[80px] text-[10px] font-bold text-zinc-500 uppercase tracking-widest text-right pr-2">Controls</div>
+                </div>
+
+                {loadingStems ? (
+                  <div className="flex items-center justify-center py-16 text-zinc-500">
+                    <Loader2 size={20} className="animate-spin mr-3 text-zinc-400" />
+                    <span className="text-sm font-medium">Loading tracks...</span>
+                  </div>
+                ) : stems.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 bg-[#09090b]">
+                    <div className="w-12 h-12 rounded-full bg-zinc-900 flex items-center justify-center mb-3">
+                      <FileAudio size={20} className="text-zinc-700" />
+                    </div>
+                    <p className="text-sm text-zinc-500 font-medium">No audio tracks</p>
+                    <p className="text-xs text-zinc-600 mt-1">Upload files or extract stems to begin.</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col divide-y divide-zinc-800/50">
+                    {stems.map((stem) => (
+                      <div key={stem.id} className="flex h-16 bg-[#09090b] hover:bg-[#121214] transition-colors group">
+                        {/* Track Info (Left panel of DAW track) */}
+                        <div className="w-[240px] px-4 py-3 flex flex-col justify-center border-r border-zinc-800/50 bg-[#101012] group-hover:bg-[#141417]">
+                           <div className="flex items-center gap-2.5">
+                             <div className="w-5 h-5 rounded flex items-center justify-center bg-zinc-800 text-zinc-400">
+                               <FileAudio size={11} />
+                             </div>
+                             <span className="text-sm font-semibold text-zinc-200 truncate">{stem.name}</span>
+                           </div>
+                           <span className="text-[10px] text-zinc-600 pl-7 uppercase tracking-wider font-bold mt-0.5">{stem.type || 'Audio'}</span>
+                        </div>
+                        
+                        {/* Fake Waveform area (Center) */}
+                        <div className="flex-1 flex items-center px-4 py-2 relative">
+                          <div className="absolute inset-y-2 left-4 right-4 bg-[#141417] border border-zinc-800/50 rounded flex items-center justify-center overflow-hidden">
+                             {/* A purely visual fake waveform representation for DAW feel */}
+                             <div className="w-full h-full flex items-center gap-[1px] opacity-[0.15] px-1">
+                                {Array.from({length: 80}).map((_, i) => (
+                                  <div key={i} className="flex-1 bg-emerald-500 rounded-sm" style={{ height: `${10 + Math.random() * 80}%` }}></div>
+                                ))}
+                             </div>
+                          </div>
+                        </div>
+
+                        {/* Controls (Right) */}
+                        <div className="w-[80px] flex items-center justify-end px-4">
+                          <button 
+                            onClick={() => deleteStem(stem.id)}
+                            className="w-8 h-8 flex items-center justify-center text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                            title="Delete Track"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
-            </div>
-          </div>
-          )}
 
-          {/* Stems List Section */}
-          {selectedSongId && (
-            <div className="premium-card p-8 anim-enter" style={{ animationDelay: '200ms' }}>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-white flex items-center gap-3 tracking-tight">
-                  <FileAudio size={22} className="text-emerald-400" />
-                  Pistas del Proyecto
-                </h2>
-                <span className="bg-white/5 text-gray-400 text-xs font-bold px-3 py-1 rounded-full border border-white/10">
-                  {stems.length} Archivos
-                </span>
-              </div>
-
-              {loadingStems ? (
-                <div className="flex items-center justify-center p-12 text-gray-500 blur-transition">
-                  <Loader2 size={28} className="animate-spin mr-3 text-blue-500" />
-                  <span className="font-medium">Cargando pistas...</span>
-                </div>
-              ) : stems.length === 0 ? (
-                <div className="text-center p-12 bg-[#09090b]/50 rounded-2xl border border-dashed border-white/10 blur-transition">
-                  <p className="text-gray-300 font-medium">Este proyecto está vacío</p>
-                  <p className="text-gray-500 text-sm mt-2">Usa el panel superior para subir o generar pistas.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 blur-transition">
-                  {stems.map((stem, i) => (
-                    <div 
-                      key={stem.id} 
-                      className="flex items-center justify-between p-4 bg-[#09090b]/80 border border-white/5 rounded-xl hover:bg-white/[0.04] hover:border-white/10 transition-all duration-200 group anim-enter"
-                      style={{ animationDelay: `${(i * 40) + 250}ms` }}
-                    >
-                      <div className="flex items-center gap-4 overflow-hidden">
-                        <div className="p-2.5 bg-blue-500/10 text-blue-400 rounded-lg shrink-0 group-hover:bg-blue-500/20 group-hover:text-blue-300 transition-colors">
-                          <FileAudio size={18} />
-                        </div>
-                        <div className="truncate">
-                          <p className="text-[15px] font-semibold text-gray-200 truncate group-hover:text-white transition-colors">{stem.name}</p>
-                          <p className="text-xs text-gray-500 mt-0.5">{stem.type || 'Audio'}</p>
-                        </div>
-                      </div>
-                      
-                      <button 
-                        onClick={() => deleteStem(stem.id)}
-                        className="p-2.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all duration-200 opacity-0 group-hover:opacity-100 shrink-0 pressable"
-                        title="Eliminar pista"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           )}
         </div>
