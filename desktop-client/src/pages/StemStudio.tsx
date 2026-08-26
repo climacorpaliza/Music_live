@@ -224,18 +224,34 @@ export default function StemStudio() {
     }
   };
 
-  const handleSplitMP3 = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!selectedSongId) return alert("Selecciona o crea una canción primero.");
+    const handleSplitMP3 = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsSplitting(true);
-    setSplitMessage("Subiendo archivo original...");
+    setSplitMessage("Creando carpeta para la canción...");
     
     try {
+      // 1. Crear una nueva canción (carpeta) automáticamente con el nombre del archivo
+      const newSongName = file.name.split('.').slice(0, -1).join('.') || file.name;
+      const { data: newSongData, error: songError } = await supabase
+        .from('songs')
+        .insert({ band_id: FAKE_BAND_ID, title: newSongName })
+        .select('id')
+        .single();
+        
+      if (songError) throw new Error("No se pudo crear la canción: " + songError.message);
+      const targetSongId = newSongData.id;
+
+      // Seleccionar automáticamente la nueva canción en la UI
+      setSelectedSongId(targetSongId);
+      await fetchSongs();
+
+      setSplitMessage("Subiendo archivo original...");
+      
       const storagePath = `${FAKE_BAND_ID}/temp/${Date.now()}_${file.name}`;
       const { error: uploadError } = await supabase.storage.from('audios').upload(storagePath, file);
-      if (uploadError) throw uploadError;
+      if (uploadError) throw new Error("Error subiendo audio: " + uploadError.message);
 
       const { data: publicUrlData } = supabase.storage.from('audios').getPublicUrl(storagePath);
       const audioUrl = publicUrlData.publicUrl;
@@ -265,7 +281,7 @@ export default function StemStudio() {
           if (!statusRes.ok) throw new Error(statusData.error || 'Error en polling');
 
           if (statusData.done) {
-            setSplitMessage("¡Separación completada! Descargando stems y procesando...");
+            setSplitMessage("¡Separación completada! Descargando stems y guardando...");
             
             const outputUrls = Array.isArray(statusData.output) ? statusData.output : [statusData.output];
             
@@ -278,17 +294,23 @@ export default function StemStudio() {
               else if (url.includes('drums')) stemName = 'Drums';
               else if (url.includes('other')) stemName = 'Other';
               else if (url.includes('vocals')) stemName = 'Vocals';
-              else if (url.endsWith('.json')) continue; 
+              else continue; // Ignorar instrum.wav, instrum2.wav, etc. para evitar pistas vacías/repetidas
               
-              const res = await fetch(url);
-              const blob = await res.blob();
+              // Evitar error de CORS o fallos silenciosos
+              const fetchRes = await fetch(url);
+              if (!fetchRes.ok) throw new Error(`Replicate devolvió error ${fetchRes.status} para ${stemName}`);
+              const blob = await fetchRes.blob();
               
-              const finalPath = `${FAKE_BAND_ID}/${selectedSongId}/${Date.now()}_${stemName}.wav`;
-              await supabase.storage.from('audios').upload(finalPath, blob, { contentType: 'audio/wav' });
+              const finalPath = `${FAKE_BAND_ID}/${targetSongId}/${Date.now()}_${stemName}.wav`;
+              const { error: stemUploadError } = await supabase.storage.from('audios').upload(finalPath, blob, { contentType: 'audio/wav' });
+              
+              // Si el storage falla (ej. límite de 1GB de Supabase), abortamos para no crear stems fantasmas
+              if (stemUploadError) throw new Error(`Error guardando ${stemName} en Storage: ` + stemUploadError.message);
+              
               const { data: finalUrl } = supabase.storage.from('audios').getPublicUrl(finalPath);
               
               await supabase.from('stems').insert({
-                song_id: selectedSongId,
+                song_id: targetSongId,
                 name: stemName,
                 file_url: finalUrl.publicUrl,
                 type: 'Audio',
@@ -298,33 +320,34 @@ export default function StemStudio() {
 
             setSplitMessage("¡Todo listo!");
             setTimeout(() => setSplitMessage(null), 5000);
-            setIsSplitting(false);
-            fetchStems(selectedSongId);
+            fetchStems(targetSongId); // Cargar los nuevos stems
 
-            await supabase.storage.from('audios').remove([storagePath]);
+            await supabase.storage.from('audios').remove([storagePath]); // Limpiar temporal
+            setIsSplitting(false);
           } else {
-            setSplitMessage(`Separando pistas (Intento ${pollCount})... Puede tardar un par de minutos.`);
+            setSplitMessage(`Procesando... intento ${pollCount}`);
             pollCount++;
             setTimeout(poll, 5000);
           }
-        } catch (pollErr: any) {
-          console.error(pollErr);
-          setSplitMessage(null);
+        } catch (error: any) {
+          console.error("Error en poll:", error);
+          alert("Error: " + error.message);
+          setSplitMessage("Error al procesar las plicas.");
           setIsSplitting(false);
-          alert(`Falló el proceso: ${pollErr.message}`);
         }
       };
       
       setTimeout(poll, 5000);
-    } catch (e: any) {
-      console.error(e);
+      
+    } catch (error: any) {
+      console.error("Error en split:", error);
+      alert("Error crítico: " + error.message);
       setIsSplitting(false);
       setSplitMessage(null);
-      alert('Error en el proceso de Split: ' + e.message);
+    } finally {
+      if (e.target) e.target.value = ''; // Limpiar el input para permitir subir el mismo archivo de nuevo
     }
-    
-    if (e.target) e.target.value = '';
-  };
+  };;
 
   return (
     <div className="h-full flex flex-col bg-[#111113] overflow-hidden text-zinc-300 select-none">
@@ -426,13 +449,7 @@ export default function StemStudio() {
                     </div>
                     
                     <div className="relative h-[40px] group bg-red-950/20 border border-red-500/30 hover:border-red-500/60 rounded flex items-center justify-between px-3 cursor-pointer transition-colors overflow-hidden">
-                      <input 
-                        type="file" 
-                        accept="audio/mpeg, audio/wav, audio/mp3" 
-                        onChange={handleSplitMP3}
-                        disabled={isSplitting}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
-                      />
+                      <input type="file" accept="audio/mpeg, audio/wav, audio/mp3" onChange={handleSplitMP3} disabled={isSplitting} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10" />
                       <div className="flex items-center gap-2 pointer-events-none z-0">
                         {isSplitting ? <RefreshCw size={14} className="animate-spin text-red-400" /> : <Sparkles size={14} className="text-red-400" />}
                         <span className="text-xs font-semibold text-zinc-300">
