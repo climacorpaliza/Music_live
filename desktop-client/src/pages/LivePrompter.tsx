@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAudioEngine, StemTrack } from '../hooks/useAudioEngine';
 import { Prompter } from '../components/Prompter';
-import { Play, Pause, Square, MonitorSpeaker, Mic, Edit3, Save, AlertCircle, Music, Headphones, Activity, Sparkles, Loader2, Disc3 } from 'lucide-react';
+import { Play, Pause, Square, Mic, Edit3, Save, AlertCircle, Music, Headphones, Activity, Sparkles, Loader2, Disc3 } from 'lucide-react';
 import '../App.css';
 
 const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
@@ -10,7 +10,7 @@ const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 export default function LivePrompter() {
   const [songs, setSongs] = useState<any[]>([]);
   const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
-  const { loadStems, play, pause, seekTo, isPlaying, currentTime, routingMode, setRoutingMode, stems, setStems, loadProgress, totalDuration, preRollDuration, exportLiveMix, exportMultitrackToZip, exportFullMixToMp3 } = useAudioEngine([]);
+  const { loadStems, play, pause, seekTo, isPlaying, currentTime, stems, setStems, loadProgress, totalDuration, preRollDuration, exportLiveMix, exportMultitrackToZip, exportFullMixToMp3 } = useAudioEngine([]);
   
   const [prompterData, setPrompterData] = useState<{bpm?: number, timeSignature?: string, firstBeatOffset?: number, beatTimes?: number[], chords: any[], sections: any[], lastAiDetection?: string}>({ chords: [], sections: [] });
   
@@ -534,7 +534,87 @@ export default function LivePrompter() {
     };
     
     window.addEventListener('keydown', handleKeyDown);
-    return (
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isEditingSections, prompterData.beatTimes]);
+
+  const savePrompterData = async () => {
+    try {
+      const { error } = await supabase.from('songs').update({ prompter_data: prompterData }).eq('id', selectedSongId);
+      if (error) throw error;
+      alert('¡Estructura guardada exitosamente en Supabase!');
+      setIsEditingSections(false);
+      
+      // Recargar el motor para reconstruir las Guías Vocales con las nuevas posiciones
+      if (selectedSongId && dbStems.length > 0) {
+         const baseOffset = prompterData.firstBeatOffset !== undefined 
+            ? prompterData.firstBeatOffset 
+            : (prompterData.chords && prompterData.chords.length > 0 ? prompterData.chords[0].time : 0);
+         loadStems(prompterData.bpm || 120, baseOffset + manualGridOffset, prompterData.timeSignature, prompterData.beatTimes, prompterData);
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert('Error guardando: ' + e.message);
+    }
+  };
+
+  const handleExportLiveMix = async () => {
+    if (!selectedSongId) return;
+    if (confirm('¿Estás seguro de que deseas exportar la mezcla con la configuración de volumen y paneo actual? (Esto tomará unos segundos)')) {
+      setIsExporting(true);
+      try {
+        await supabase.from('songs').update({ prompter_data: prompterData }).eq('id', selectedSongId);
+        await exportLiveMix(selectedSongId, FAKE_BAND_ID, prompterData, setExportProgress);
+        alert('¡Exportación dual completada exitosamente!');
+      } catch (err: any) {
+        alert(err.message);
+      } finally {
+        setIsExporting(false);
+        setExportProgress('');
+      }
+    }
+  };
+
+  const handleExportMultitrackToZip = async () => {
+    if (!selectedSongId) return;
+    const song = songs.find(s => s.id === selectedSongId);
+    const songName = song ? song.title : 'song';
+    if (confirm('¿Estás seguro de que deseas exportar cada pista (stems, click, cues) en WAV separados dentro de un archivo ZIP? (Esto tomará unos minutos)')) {
+      setIsExportingMultitrack(true);
+      try {
+        await supabase.from('songs').update({ prompter_data: prompterData }).eq('id', selectedSongId);
+        await exportMultitrackToZip(songName, prompterData, setExportProgress);
+        alert('¡Exportación Multitrack completada exitosamente!');
+      } catch (err: any) {
+        alert(err.message);
+      } finally {
+        setIsExportingMultitrack(false);
+        setExportProgress('');
+      }
+    }
+  };
+
+  const handleExportFullMixMp3 = async () => {
+    if (!selectedSongId) return;
+    const song = songs.find(s => s.id === selectedSongId);
+    const songName = song ? song.title : 'song';
+    if (confirm('¿Deseas exportar la mezcla completa (todos los stems, click y cues) en formato MP3 (Alta Calidad 320kbps)?')) {
+      setIsExportingMp3(true);
+      try {
+        await supabase.from('songs').update({ prompter_data: prompterData }).eq('id', selectedSongId);
+        await exportFullMixToMp3(songName, prompterData, setExportProgress);
+        alert('¡Exportación a MP3 completada exitosamente!');
+      } catch (err: any) {
+        alert(err.message);
+      } finally {
+        setIsExportingMp3(false);
+        setExportProgress('');
+      }
+    }
+  };
+
+  // ==========================================
+
+  return (
     <div className="h-screen bg-[#09090b] text-zinc-300 flex flex-col font-sans overflow-hidden select-none">
       
       {/* Error Alert */}
