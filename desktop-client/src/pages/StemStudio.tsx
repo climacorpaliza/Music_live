@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import './StemStudio.css';
 import { supabase } from '../lib/supabase';
 import StemUploader from '../components/StemUploader';
-import { Music, FolderPlus, Disc3, FileAudio, Loader2, Trash2, Sparkles, CheckCircle, RefreshCw } from 'lucide-react';
+import { Music, FolderPlus, Disc3, FileAudio, Loader2, Trash2, Sparkles, CheckCircle, RefreshCw, Play, Pause } from 'lucide-react';
 
 const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -23,6 +23,23 @@ export default function StemStudio() {
   const [isSplitting, setIsSplitting] = useState(false);
   const [splitMessage, setSplitMessage] = useState<string | null>(null);
   
+  // Audio Playback State
+  const [playingStemId, setPlayingStemId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const togglePlay = (stem: any) => {
+    if (playingStemId === stem.id) {
+      audioRef.current?.pause();
+      setPlayingStemId(null);
+    } else {
+      if (audioRef.current) {
+         audioRef.current.src = stem.file_url;
+         audioRef.current.play().catch(e => console.error("Playback failed", e));
+         setPlayingStemId(stem.id);
+      }
+    }
+  };
+
   useEffect(() => {
     fetchSongs();
   }, []);
@@ -30,6 +47,11 @@ export default function StemStudio() {
   useEffect(() => {
     if (selectedSongId) {
       fetchStems(selectedSongId);
+      // Stop playing if song changes
+      if (audioRef.current) {
+        audioRef.current.pause();
+        setPlayingStemId(null);
+      }
     } else {
       setStems([]);
     }
@@ -72,9 +94,6 @@ export default function StemStudio() {
     setAiSuccessMessage(null);
     
     try {
-      // ---------------------------------------------------------
-      // PASO 1: DETECCIÓN DE TEMPO Y SECCIONES (SAKEMIN AI)
-      // ---------------------------------------------------------
       setAiSuccessMessage(`Paso 1/2: Iniciando análisis de Tempo...`);
 
       const beatsRes = await fetch('/api/ai/beats', {
@@ -105,7 +124,6 @@ export default function StemStudio() {
            
            let rawOutput = statusData.data;
            if (Array.isArray(rawOutput) && rawOutput.length > 0 && typeof rawOutput[0] === 'string' && rawOutput[0].startsWith('http')) {
-             console.log("Fetching JSON from URL:", rawOutput[0]);
              const beatFileRes = await fetch(rawOutput[0]);
              rawOutput = await beatFileRes.json();
            }
@@ -123,13 +141,11 @@ export default function StemStudio() {
 
            if (beatTimes.length > 0 && rawOutput.bpm > 0) {
                const beatInterval = 60 / rawOutput.bpm;
-               // Extrapolar hacia atrás (para rellenar intros de piano/guitarra sin batería)
                let firstBeat = beatTimes[0];
                while (firstBeat - beatInterval >= 0) {
                    firstBeat -= beatInterval;
                    beatTimes.unshift(firstBeat);
                }
-               // Extrapolar hacia adelante hasta 600 segundos (10 minutos)
                let lastBeat = beatTimes[beatTimes.length - 1];
                while (lastBeat + beatInterval <= 600) {
                    lastBeat += beatInterval;
@@ -158,9 +174,6 @@ export default function StemStudio() {
          throw new Error('Timeout esperando el análisis de Tempo');
       }
 
-      // ---------------------------------------------------------
-      // PASO 2: GUARDAR TEMPO Y GRILLA
-      // ---------------------------------------------------------
       setAiSuccessMessage(`Tempo detectado. Guardando en la base de datos...`);
       
       const { data: songData } = await supabase.from('songs').select('prompter_data').eq('id', selectedSongId).single();
@@ -193,7 +206,11 @@ export default function StemStudio() {
   const deleteStem = async (stemId: string) => {
     if (!confirm('¿Estás seguro de que quieres eliminar esta pista?')) return;
     
-    // Opcional: También borrar de Storage si quisieras
+    if (playingStemId === stemId) {
+      audioRef.current?.pause();
+      setPlayingStemId(null);
+    }
+    
     const { error } = await supabase.from('stems').delete().eq('id', stemId);
     if (!error && selectedSongId) {
       fetchStems(selectedSongId);
@@ -212,7 +229,6 @@ export default function StemStudio() {
     setSplitMessage("Subiendo archivo original...");
     
     try {
-      // 1. Upload to Supabase Storage temporarily
       const storagePath = `${FAKE_BAND_ID}/temp/${Date.now()}_${file.name}`;
       const { error: uploadError } = await supabase.storage.from('audios').upload(storagePath, file);
       if (uploadError) throw uploadError;
@@ -222,7 +238,6 @@ export default function StemStudio() {
 
       setSplitMessage("Iniciando IA en la nube...");
 
-      // 2. Start Replicate Job
       const res = await fetch('/api/ai/split', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -234,7 +249,6 @@ export default function StemStudio() {
       const { predictionId } = data;
       setSplitMessage("Separando pistas (Esto puede tomar 1-3 minutos)...");
 
-      // 3. Poll for results
       let pollCount = 1;
       const poll = async () => {
         try {
@@ -249,9 +263,6 @@ export default function StemStudio() {
           if (statusData.done) {
             setSplitMessage("¡Separación completada! Descargando stems y procesando...");
             
-            // Output format of cwalo/all-in-one-music-structure-analysis is a JSON string/object or array of URLs.
-            // Usually, if it's an array, output[1] is bass, etc.
-            // Let's assume output is an array of URLs.
             const outputUrls = Array.isArray(statusData.output) ? statusData.output : [statusData.output];
             
             for (let i = 0; i < outputUrls.length; i++) {
@@ -263,18 +274,15 @@ export default function StemStudio() {
               else if (url.includes('drums')) stemName = 'Drums';
               else if (url.includes('other')) stemName = 'Other';
               else if (url.includes('vocals')) stemName = 'Vocals';
-              else if (url.endsWith('.json')) continue; // Skip metadata file for stems
+              else if (url.endsWith('.json')) continue; 
               
-              // Download from Replicate URL
               const res = await fetch(url);
               const blob = await res.blob();
               
-              // Upload to Supabase
               const finalPath = `${FAKE_BAND_ID}/${selectedSongId}/${Date.now()}_${stemName}.wav`;
               await supabase.storage.from('audios').upload(finalPath, blob, { contentType: 'audio/wav' });
               const { data: finalUrl } = supabase.storage.from('audios').getPublicUrl(finalPath);
               
-              // Save to database
               await supabase.from('stems').insert({
                 song_id: selectedSongId,
                 name: stemName,
@@ -289,7 +297,6 @@ export default function StemStudio() {
             setIsSplitting(false);
             fetchStems(selectedSongId);
 
-            // Borramos el MP3 temporal
             await supabase.storage.from('audios').remove([storagePath]);
           } else {
             setSplitMessage(`Separando pistas (Intento ${pollCount})... Puede tardar un par de minutos.`);
@@ -317,6 +324,16 @@ export default function StemStudio() {
 
   return (
     <div className="h-full flex flex-col bg-[#111113] overflow-hidden text-zinc-300 select-none">
+      {/* Hidden Audio Player for Previews */}
+      <audio 
+        ref={audioRef} 
+        onEnded={() => setPlayingStemId(null)}
+        onError={() => {
+           console.error("Audio playback error");
+           setPlayingStemId(null);
+        }}
+      />
+
       {/* Header - DAW Style */}
       <div className="flex items-center justify-between px-4 py-3 bg-[#18181b] border-b border-zinc-800 shrink-0">
         <div className="flex items-center gap-3">
@@ -388,15 +405,15 @@ export default function StemStudio() {
               {/* Top Controls Toolbar */}
               <div className="flex flex-col xl:flex-row gap-4 shrink-0">
                 
-                {/* Uploader / Adder */}
+                {/* Uploader / Adder (Red/Orange Theme) */}
                 <div className="flex-1 bg-[#1a1a1e] border border-zinc-800/80 rounded-lg p-4 flex flex-col gap-4">
                   <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/50">
-                    <FolderPlus size={14} className="text-emerald-500" />
+                    <FolderPlus size={14} className="text-orange-500" />
                     <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Add Audio Files</h3>
                   </div>
                   
-                  <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                    <div className="text-xs w-full h-[40px] flex items-center justify-center border border-zinc-700 hover:border-zinc-500 bg-[#202025] rounded transition-colors">
+                  <div className="flex-1 flex flex-col gap-4">
+                    <div className="text-xs w-full flex items-center justify-center border border-orange-500/20 hover:border-orange-500/50 bg-orange-950/10 rounded transition-colors overflow-hidden py-1">
                        <StemUploader 
                           songId={selectedSongId}
                           bandId={FAKE_BAND_ID}
@@ -404,7 +421,7 @@ export default function StemStudio() {
                         />
                     </div>
                     
-                    <div className="relative h-[40px] group bg-[#202025] border border-zinc-700 hover:border-emerald-500/50 rounded flex items-center justify-between px-3 cursor-pointer transition-colors overflow-hidden">
+                    <div className="relative h-[40px] group bg-red-950/20 border border-red-500/30 hover:border-red-500/60 rounded flex items-center justify-between px-3 cursor-pointer transition-colors overflow-hidden">
                       <input 
                         type="file" 
                         accept="audio/mpeg, audio/wav, audio/mp3" 
@@ -413,7 +430,7 @@ export default function StemStudio() {
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
                       />
                       <div className="flex items-center gap-2 pointer-events-none z-0">
-                        {isSplitting ? <RefreshCw size={14} className="animate-spin text-emerald-400" /> : <Sparkles size={14} className="text-emerald-400" />}
+                        {isSplitting ? <RefreshCw size={14} className="animate-spin text-red-400" /> : <Sparkles size={14} className="text-red-400" />}
                         <span className="text-xs font-semibold text-zinc-300">
                           {isSplitting ? splitMessage : "AI Stem Splitter (MP3)"}
                         </span>
@@ -468,9 +485,9 @@ export default function StemStudio() {
               <div className="flex flex-col bg-[#09090b] border border-zinc-800/80 rounded-lg overflow-hidden shrink-0 shadow-2xl">
                 {/* Tracks Header */}
                 <div className="flex items-center px-4 py-2 bg-[#121214] border-b border-zinc-800">
-                   <div className="w-[240px] text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Track Name</div>
+                   <div className="w-[320px] text-[10px] font-bold text-zinc-500 uppercase tracking-widest shrink-0">Track Name</div>
                    <div className="flex-1 text-[10px] font-bold text-zinc-500 uppercase tracking-widest pl-4">Waveform</div>
-                   <div className="w-[80px] text-[10px] font-bold text-zinc-500 uppercase tracking-widest text-right pr-2">Controls</div>
+                   <div className="w-[100px] text-[10px] font-bold text-zinc-500 uppercase tracking-widest text-right pr-2 shrink-0">Controls</div>
                 </div>
 
                 {loadingStems ? (
@@ -489,32 +506,39 @@ export default function StemStudio() {
                 ) : (
                   <div className="flex flex-col divide-y divide-zinc-800/50">
                     {stems.map((stem) => (
-                      <div key={stem.id} className="flex h-16 bg-[#09090b] hover:bg-[#121214] transition-colors group">
+                      <div key={stem.id} className="flex min-h-[64px] bg-[#09090b] hover:bg-[#121214] transition-colors group">
                         {/* Track Info (Left panel of DAW track) */}
-                        <div className="w-[240px] px-4 py-3 flex flex-col justify-center border-r border-zinc-800/50 bg-[#101012] group-hover:bg-[#141417]">
-                           <div className="flex items-center gap-2.5">
-                             <div className="w-5 h-5 rounded flex items-center justify-center bg-zinc-800 text-zinc-400">
+                        <div className="w-[320px] px-4 py-3 flex flex-col justify-center border-r border-zinc-800/50 bg-[#101012] group-hover:bg-[#141417] shrink-0">
+                           <div className="flex items-start gap-2.5">
+                             <div className="w-5 h-5 shrink-0 rounded flex items-center justify-center bg-zinc-800 text-zinc-400 mt-0.5">
                                <FileAudio size={11} />
                              </div>
-                             <span className="text-sm font-semibold text-zinc-200 truncate">{stem.name}</span>
+                             <span className="text-[13px] font-semibold text-zinc-200 leading-snug whitespace-normal break-words">{stem.name}</span>
                            </div>
-                           <span className="text-[10px] text-zinc-600 pl-7 uppercase tracking-wider font-bold mt-0.5">{stem.type || 'Audio'}</span>
+                           <span className="text-[9px] text-zinc-600 pl-7 uppercase tracking-wider font-bold mt-1.5">{stem.type || 'Audio'}</span>
                         </div>
                         
                         {/* Fake Waveform area (Center) */}
                         <div className="flex-1 flex items-center px-4 py-2 relative">
                           <div className="absolute inset-y-2 left-4 right-4 bg-[#141417] border border-zinc-800/50 rounded flex items-center justify-center overflow-hidden">
                              {/* A purely visual fake waveform representation for DAW feel */}
-                             <div className="w-full h-full flex items-center gap-[1px] opacity-[0.15] px-1">
+                             <div className={`w-full h-full flex items-center gap-[1px] opacity-[0.15] px-1 transition-opacity duration-300 ${playingStemId === stem.id ? 'opacity-[0.8] animate-pulse' : ''}`}>
                                 {Array.from({length: 80}).map((_, i) => (
-                                  <div key={i} className="flex-1 bg-emerald-500 rounded-sm" style={{ height: `${10 + Math.random() * 80}%` }}></div>
+                                  <div key={i} className={`flex-1 ${playingStemId === stem.id ? 'bg-emerald-400' : 'bg-emerald-500'} rounded-sm`} style={{ height: `${10 + Math.random() * 80}%` }}></div>
                                 ))}
                              </div>
                           </div>
                         </div>
 
                         {/* Controls (Right) */}
-                        <div className="w-[80px] flex items-center justify-end px-4">
+                        <div className="w-[100px] flex items-center justify-end px-4 gap-1 shrink-0">
+                          <button 
+                            onClick={() => togglePlay(stem)}
+                            className="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded transition-colors"
+                            title={playingStemId === stem.id ? "Pause" : "Play"}
+                          >
+                            {playingStemId === stem.id ? <Pause size={15} /> : <Play size={15} />}
+                          </button>
                           <button 
                             onClick={() => deleteStem(stem.id)}
                             className="w-8 h-8 flex items-center justify-center text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
