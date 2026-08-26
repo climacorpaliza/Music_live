@@ -1,43 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, ArrowRight } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-
-// MOCK DATA
-const ALBUMS = [
-  {
-    id: 1,
-    title: "Midnight City Blues",
-    artist: "Spaghetti Blue Blues",
-    coverUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop",
-    tracks: [
-      { title: "Neon Lights", duration: "3:45" },
-      { title: "Desert Wind", duration: "4:20" },
-      { title: "Night Rider", duration: "3:10" }
-    ]
-  },
-  {
-    id: 2,
-    title: "Acoustic Sessions",
-    artist: "The Velvet Chords",
-    coverUrl: "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?q=80&w=600&auto=format&fit=crop",
-    tracks: [
-      { title: "Unplugged Intro", duration: "2:15" },
-      { title: "Raw Emotions", duration: "4:05" },
-      { title: "Strings & Wood", duration: "3:50" }
-    ]
-  },
-  {
-    id: 3,
-    title: "Electronic Dreams",
-    artist: "Synthwave Cult",
-    coverUrl: "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=600&auto=format&fit=crop",
-    tracks: [
-      { title: "Digital Sunrise", duration: "5:00" },
-      { title: "Cyber Pulse", duration: "4:30" },
-      { title: "Virtual Reality", duration: "6:15" }
-    ]
-  }
-];
+import { supabase } from '../lib/supabase';
 
 // Secure Player Component
 const SecurePlayer = ({ album }: { album: any }) => {
@@ -68,6 +32,15 @@ const SecurePlayer = ({ album }: { album: any }) => {
     return () => audio.removeEventListener('timeupdate', updateProgress);
   }, []);
 
+  useEffect(() => {
+    // Auto-play when track changes if we were already playing, or just load
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.play().catch(() => console.log('Auto-play prevented'));
+      }
+    }
+  }, [currentTrack]);
+
   const togglePlay = () => {
     if (audioRef.current) {
       if (isPlaying) {
@@ -80,13 +53,15 @@ const SecurePlayer = ({ album }: { album: any }) => {
   };
   
   if (!album) return null;
+  
+  const tracks = album.tracks || [];
+  const currentTrackData = tracks[currentTrack];
 
   return (
     <div 
       className="bg-[#121214] border border-[#b08b4a]/20 p-6 rounded-xl shadow-2xl relative overflow-hidden group select-none transition-all duration-700"
       onContextMenu={preventContextMenu}
     >
-      {/* Decorative gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-[#b08b4a]/10 to-transparent opacity-50 pointer-events-none"></div>
       
       <div className="relative z-10 flex flex-col md:flex-row items-center gap-8">
@@ -94,7 +69,7 @@ const SecurePlayer = ({ album }: { album: any }) => {
         <div className="w-48 h-48 rounded-lg border border-zinc-800 flex items-center justify-center relative overflow-hidden shrink-0 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
            <div 
              className={`absolute inset-0 bg-cover bg-center transition-transform duration-[10s] ease-linear ${isPlaying ? 'scale-125' : 'scale-100'}`} 
-             style={{ backgroundImage: `url(${album.coverUrl})` }}
+             style={{ backgroundImage: `url(${album.cover_url})` }}
            ></div>
            {isPlaying && (
              <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px] flex items-center justify-center animate-pulse">
@@ -108,11 +83,11 @@ const SecurePlayer = ({ album }: { album: any }) => {
         {/* Player Controls & Info */}
         <div className="flex-1 w-full">
           <h3 className="font-oswald text-[#b08b4a] text-xs tracking-[0.2em] uppercase mb-2">Now Playing</h3>
-          <h2 className="font-raleway text-3xl font-bold text-white mb-1">{album.tracks[currentTrack].title}</h2>
+          <h2 className="font-raleway text-3xl font-bold text-white mb-1">{currentTrackData ? currentTrackData.title : 'No track selected'}</h2>
           <p className="font-lato text-zinc-400 mb-6">{album.artist}</p>
 
           {/* Secure Audio Element */}
-          <audio ref={audioRef} src="" preload="none" onEnded={() => setIsPlaying(false)} />
+          <audio ref={audioRef} src={currentTrackData?.audio_url || ''} preload="none" onEnded={() => setIsPlaying(false)} />
 
           {/* Progress Bar */}
           <div className="w-full h-1.5 bg-zinc-900 rounded-full mb-6 relative cursor-not-allowed">
@@ -131,19 +106,20 @@ const SecurePlayer = ({ album }: { album: any }) => {
               <button 
                 onClick={togglePlay}
                 className="w-14 h-14 bg-[#b08b4a] hover:bg-[#c9a056] text-[#181716] rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(176,139,74,0.3)]"
+                disabled={!currentTrackData}
               >
                 {isPlaying ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" className="ml-1" />}
               </button>
               <button 
                 className="text-zinc-500 hover:text-white transition-colors"
-                onClick={() => setCurrentTrack(Math.min(album.tracks.length - 1, currentTrack + 1))}
+                onClick={() => setCurrentTrack(Math.min(tracks.length - 1, currentTrack + 1))}
               >
                 <SkipForward size={24} />
               </button>
             </div>
             
             <div className="flex flex-col items-end gap-1">
-              <span className="font-lato text-xs text-zinc-500">Track {currentTrack + 1} of {album.tracks.length}</span>
+              <span className="font-lato text-xs text-zinc-500">Track {tracks.length > 0 ? currentTrack + 1 : 0} of {tracks.length}</span>
               <div className="flex items-center gap-2 text-zinc-500 hidden md:flex">
                  <Volume2 size={16} />
                  <div className="w-20 h-1 bg-zinc-800 rounded-full">
@@ -158,10 +134,10 @@ const SecurePlayer = ({ album }: { album: any }) => {
       {/* Tracklist Preview */}
       <div className="mt-8 pt-6 border-t border-zinc-800/50">
         <h4 className="font-oswald text-zinc-400 text-xs tracking-widest uppercase mb-4">Tracklist</h4>
-        <div className="space-y-2">
-          {album.tracks.map((track: any, idx: number) => (
+        <div className="space-y-2 h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+          {tracks.length === 0 ? <p className="text-zinc-500 font-lato text-sm">No tracks available for this album.</p> : tracks.map((track: any, idx: number) => (
             <div 
-              key={idx} 
+              key={track.id} 
               onClick={() => { setCurrentTrack(idx); setIsPlaying(true); }}
               className={`flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors ${idx === currentTrack ? 'bg-zinc-800/50 text-[#b08b4a]' : 'hover:bg-zinc-900/50 text-zinc-400 hover:text-white'}`}
             >
@@ -181,7 +157,36 @@ const SecurePlayer = ({ album }: { album: any }) => {
 
 // Main Landing Page Component
 export default function MusicHub() {
-  const [activeAlbum, setActiveAlbum] = useState(ALBUMS[0]);
+  const [albums, setAlbums] = useState<any[]>([]);
+  const [siteConfig, setSiteConfig] = useState<any>(null);
+  const [activeAlbum, setActiveAlbum] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    // Fetch CMS Config
+    const { data: config } = await supabase.from('site_config').select('*').limit(1).single();
+    if (config) setSiteConfig(config);
+
+    // Fetch Albums with Tracks
+    const { data: albumsData } = await supabase.from('albums').select('*, tracks(*)').order('created_at', { ascending: false });
+    
+    if (albumsData && albumsData.length > 0) {
+      // Sort tracks for each album
+      albumsData.forEach(a => {
+        if(a.tracks) {
+          a.tracks.sort((t1: any, t2: any) => t1.track_number - t2.track_number);
+        }
+      });
+      setAlbums(albumsData);
+      setActiveAlbum(albumsData[0]);
+    }
+    
+    setLoading(false);
+  };
 
   const handleAlbumSelect = (album: any) => {
     setActiveAlbum(album);
@@ -190,6 +195,10 @@ export default function MusicHub() {
       playlistSection.scrollIntoView({ behavior: 'smooth' });
     }
   };
+
+  if (loading) {
+    return <div className="min-h-screen bg-[#181716] flex items-center justify-center text-[#b08b4a] font-oswald text-2xl tracking-widest">LOADING ENGINE...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-[#181716] text-white selection:bg-[#b08b4a] selection:text-[#181716]">
@@ -210,10 +219,16 @@ export default function MusicHub() {
 
           <div className="flex items-center gap-4">
             <Link 
+              to="/admin/cms" 
+              className="font-oswald text-zinc-500 hover:text-white px-4 py-2 tracking-[0.1em] uppercase text-sm transition-all duration-300"
+            >
+              CMS
+            </Link>
+            <Link 
               to="/login" 
               className="font-oswald border border-[#b08b4a] text-[#b08b4a] hover:bg-[#b08b4a] hover:text-[#181716] px-6 py-2 tracking-[0.1em] uppercase text-sm transition-all duration-300"
             >
-              Artist Login
+              Login
             </Link>
           </div>
         </div>
@@ -221,7 +236,6 @@ export default function MusicHub() {
 
       {/* HERO SECTION */}
       <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 px-6 min-h-[90vh] flex items-center">
-        {/* Abstract Background Elements */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
            <div className="absolute top-1/4 -right-1/4 w-[800px] h-[800px] bg-[#b08b4a]/5 rounded-full blur-3xl"></div>
            <div className="absolute -bottom-1/4 -left-1/4 w-[600px] h-[600px] bg-[#b08b4a]/5 rounded-full blur-3xl"></div>
@@ -229,13 +243,12 @@ export default function MusicHub() {
 
         <div className="max-w-7xl mx-auto w-full relative z-10 grid md:grid-cols-2 gap-12 items-center">
           <div>
-            <h2 className="font-oswald text-[#b08b4a] text-sm md:text-base tracking-[0.3em] uppercase mb-6">Tandao Live Hub</h2>
+            <h2 className="font-oswald text-[#b08b4a] text-sm md:text-base tracking-[0.3em] uppercase mb-6">{siteConfig?.hero_subtitle || 'Tandao Live Hub'}</h2>
             <h1 className="font-raleway text-5xl md:text-7xl font-bold leading-[1.1] mb-6">
-              THE PREMIER <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-zinc-500">MUSIC PLATFORM</span>
+              {siteConfig?.hero_title || 'THE PREMIER MUSIC PLATFORM'}
             </h1>
             <p className="font-lato text-lg text-zinc-400 mb-10 max-w-lg leading-relaxed">
-              Explore exclusive projects, stream secure playlists, and manage your live sets all in one professional environment.
+              {siteConfig?.hero_description || 'Explore exclusive projects, stream secure playlists, and manage your live sets.'}
             </p>
             <div className="flex flex-wrap gap-4">
               <a href="#playlist" className="font-oswald bg-[#b08b4a] hover:bg-[#c9a056] text-[#181716] px-8 py-4 tracking-[0.1em] uppercase text-sm font-bold transition-all duration-300 flex items-center gap-2">
@@ -249,13 +262,12 @@ export default function MusicHub() {
           
           <div className="relative aspect-square md:aspect-auto md:h-[600px] w-full">
             <div className="absolute inset-0 border border-zinc-800 rounded-2xl transform rotate-3 scale-95 transition-transform duration-700 hover:rotate-0 hover:scale-100 flex flex-col overflow-hidden">
-               {/* Decorative App Mockup */}
                <div className="h-8 bg-[#121214] border-b border-zinc-800 flex items-center px-4 gap-2">
                  <div className="w-2.5 h-2.5 rounded-full bg-red-500/50"></div>
                  <div className="w-2.5 h-2.5 rounded-full bg-amber-500/50"></div>
                  <div className="w-2.5 h-2.5 rounded-full bg-green-500/50"></div>
                </div>
-               <div className="flex-1 bg-[#0a0a0c] bg-cover bg-center opacity-60" style={{ backgroundImage: `url(${activeAlbum.coverUrl})` }}></div>
+               <div className="flex-1 bg-[#0a0a0c] bg-cover bg-center opacity-60" style={{ backgroundImage: `url(${activeAlbum?.cover_url || ''})` }}></div>
             </div>
           </div>
         </div>
@@ -269,34 +281,36 @@ export default function MusicHub() {
               <h2 className="font-oswald text-[#b08b4a] text-sm tracking-[0.2em] uppercase mb-4">Discover</h2>
               <h3 className="font-raleway text-4xl md:text-5xl font-bold">Featured Projects</h3>
             </div>
-            <a href="#" className="hidden md:flex font-lato text-zinc-400 hover:text-white items-center gap-2 transition-colors">
-              View All <ArrowRight size={16} />
-            </a>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {ALBUMS.map((album) => (
-              <div key={album.id} className="group cursor-pointer" onClick={() => handleAlbumSelect(album)}>
-                <div className={`relative aspect-[4/5] bg-zinc-900 overflow-hidden mb-6 rounded-lg transition-all duration-500 ${activeAlbum.id === album.id ? 'ring-2 ring-[#b08b4a] ring-offset-4 ring-offset-[#121214] scale-[1.02]' : ''}`}>
-                  {/* Project image */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#181716] via-[#181716]/40 to-transparent opacity-90 z-10"></div>
-                  <div 
-                    className="w-full h-full bg-cover bg-center group-hover:scale-110 transition-transform duration-700"
-                    style={{ backgroundImage: `url(${album.coverUrl})` }}
-                  ></div>
-                  
-                  <div className="absolute bottom-6 left-6 right-6 z-20">
-                    <span className="font-oswald bg-[#b08b4a] text-[#181716] text-[10px] px-2 py-1 tracking-[0.2em] uppercase font-bold mb-3 inline-block shadow-lg">Album</span>
-                    <h4 className="font-raleway text-2xl font-bold text-white mb-1 group-hover:text-[#b08b4a] transition-colors line-clamp-1">{album.title}</h4>
-                    <p className="font-lato text-zinc-400 text-sm flex items-center justify-between">
-                      {album.artist}
-                      <span className="opacity-0 group-hover:opacity-100 transition-opacity"><Play size={16} fill="currentColor" className="text-[#b08b4a]" /></span>
-                    </p>
+          {albums.length === 0 ? (
+            <div className="text-center py-20 text-zinc-500 font-lato border border-zinc-800 border-dashed rounded-xl">
+              No albums published yet. Go to CMS Admin to add some.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+              {albums.map((album) => (
+                <div key={album.id} className="group cursor-pointer" onClick={() => handleAlbumSelect(album)}>
+                  <div className={`relative aspect-square bg-zinc-900 overflow-hidden mb-4 rounded-lg transition-all duration-500 ${activeAlbum?.id === album.id ? 'ring-2 ring-[#b08b4a] ring-offset-4 ring-offset-[#121214] scale-[1.02]' : ''}`}>
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#181716] via-[#181716]/40 to-transparent opacity-90 z-10"></div>
+                    <div 
+                      className="w-full h-full bg-cover bg-center group-hover:scale-110 transition-transform duration-700"
+                      style={{ backgroundImage: `url(${album.cover_url})` }}
+                    ></div>
+                    
+                    <div className="absolute bottom-4 left-4 right-4 z-20">
+                      <span className="font-oswald bg-[#b08b4a] text-[#181716] text-[10px] px-2 py-1 tracking-[0.2em] uppercase font-bold mb-2 inline-block shadow-lg">Album</span>
+                      <h4 className="font-raleway text-xl font-bold text-white mb-1 group-hover:text-[#b08b4a] transition-colors line-clamp-1">{album.title}</h4>
+                      <p className="font-lato text-zinc-400 text-xs flex items-center justify-between">
+                        {album.artist}
+                        <span className="opacity-0 group-hover:opacity-100 transition-opacity"><Play size={14} fill="currentColor" className="text-[#b08b4a]" /></span>
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -311,7 +325,13 @@ export default function MusicHub() {
             </p>
           </div>
           
-          <SecurePlayer album={activeAlbum} />
+          {albums.length > 0 ? (
+            <SecurePlayer album={activeAlbum} />
+          ) : (
+            <div className="text-center py-20 text-zinc-500 font-lato bg-[#121214] rounded-xl border border-zinc-800">
+              No audio loaded.
+            </div>
+          )}
         </div>
       </section>
 
@@ -327,33 +347,13 @@ export default function MusicHub() {
                 The premier engine for musical projects, secure streaming, and live performance management.
               </p>
             </div>
-            
-            <div>
-              <h4 className="font-oswald text-white tracking-[0.1em] mb-6">PLATFORM</h4>
-              <ul className="space-y-4 font-lato text-zinc-500">
-                <li><a href="#projects" className="hover:text-[#b08b4a] transition-colors">Projects</a></li>
-                <li><a href="#playlist" className="hover:text-[#b08b4a] transition-colors">Playlists</a></li>
-                <li><a href="#" className="hover:text-[#b08b4a] transition-colors">CMS Admin</a></li>
-              </ul>
+            <div className="border-t border-zinc-900 pt-8 flex flex-col md:flex-row items-center justify-between font-lato text-sm text-zinc-600 col-span-1 md:col-span-4">
+              <p>&copy; {new Date().getFullYear()} Tandao Live Hub. All rights reserved.</p>
+              <p className="mt-2 md:mt-0">Designed for Professional Audio</p>
             </div>
-            
-            <div>
-              <h4 className="font-oswald text-white tracking-[0.1em] mb-6">CONTACT</h4>
-              <ul className="space-y-4 font-lato text-zinc-500">
-                <li><a href="#" className="hover:text-[#b08b4a] transition-colors">Support</a></li>
-                <li><a href="#" className="hover:text-[#b08b4a] transition-colors">Artist Inquiry</a></li>
-                <li><a href="#" className="hover:text-[#b08b4a] transition-colors">Terms of Service</a></li>
-              </ul>
-            </div>
-          </div>
-          
-          <div className="border-t border-zinc-900 pt-8 flex flex-col md:flex-row items-center justify-between font-lato text-sm text-zinc-600">
-            <p>&copy; {new Date().getFullYear()} Tandao Live Hub. All rights reserved.</p>
-            <p className="mt-2 md:mt-0">Designed for Professional Audio</p>
           </div>
         </div>
       </footer>
-
     </div>
   );
 }
