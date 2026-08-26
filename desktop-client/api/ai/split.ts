@@ -19,12 +19,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log(`[IA] Iniciando Replicate Async Split... Audio: ${audioUrl}`);
 
     const prediction = await replicate.predictions.create({
-      // Usamos el modelo cwalo/all-in-one-music-structure-analysis
-      version: "6deeba047db17da69e9826c0285cd137cd2a81af05eb44ff496b7acd69b3a383",
+      // Usamos el modelo lucataco/mvsep-mdx23-music-separation (Ganador MDX'23)
+      version: "510b9b91aec1bfa7d634e6c06ee80c18492fb0fc06aa1474533fbda90dd3dba4",
       input: {
-        music_input: audioUrl,
-        demux: true, // Esto obliga a que nos devuelva los stems
-        visualize: false // Ahorramos tiempo desactivando el video de visualización
+        audio: audioUrl
       }
     });
 
