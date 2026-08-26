@@ -8,6 +8,7 @@ import StemStudio from './pages/StemStudio';
 import SetlistBuilder from './pages/SetlistBuilder';
 import LiveConcert from './pages/LiveConcert';
 import MobileInEar from './pages/MobileInEar';
+import MusicHub from './pages/MusicHub';
 import './App.css';
 
 // Protected Route Wrapper
@@ -48,6 +49,9 @@ function AppRoutes() {
         <Route path="/setlists" element={<SetlistBuilder />} />
       </Route>
       
+      {/* Public Landing Page */}
+      <Route path="/hub" element={<MusicHub />} />
+
       {/* Standalone Mobile Route */}
       <Route path="/mobile" element={
         <ProtectedRoute>
