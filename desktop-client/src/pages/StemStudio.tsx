@@ -17,6 +17,10 @@ export default function StemStudio() {
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [aiSuccessMessage, setAiSuccessMessage] = useState<string | null>(null);
   const [manualKey, setManualKey] = useState<string>('');
+  
+  // AI Splitter States
+  const [isSplittingAI, setIsSplittingAI] = useState(false);
+  const [aiSplitProgress, setAiSplitProgress] = useState('');
   const [timeSignature, setTimeSignature] = useState<string>('4/4');
 
   // AI Splitter State
@@ -432,7 +436,7 @@ export default function StemStudio() {
                       <div className="flex items-center gap-2 pointer-events-none z-0">
                         {isSplitting ? <RefreshCw size={14} className="animate-spin text-red-400" /> : <Sparkles size={14} className="text-red-400" />}
                         <span className="text-xs font-semibold text-zinc-300">
-                          {isSplitting ? splitMessage : "AI Stem Splitter (MP3)"}
+                          {isSplitting ? splitMessage : "AI Studio Splitter (WAV / 320k)"}
                         </span>
                       </div>
                     </div>
