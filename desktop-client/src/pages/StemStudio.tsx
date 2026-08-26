@@ -18,9 +18,9 @@ export default function StemStudio() {
   const [aiSuccessMessage, setAiSuccessMessage] = useState<string | null>(null);
   const [manualKey, setManualKey] = useState<string>('');
   
-  // AI Splitter States
-  const [isSplittingAI, setIsSplittingAI] = useState(false);
-  const [aiSplitProgress, setAiSplitProgress] = useState('');
+
+
+
   const [timeSignature, setTimeSignature] = useState<string>('4/4');
 
   // AI Splitter State
