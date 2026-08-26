@@ -1,23 +1,60 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, Music, ArrowRight } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+// MOCK DATA
+const ALBUMS = [
+  {
+    id: 1,
+    title: "Midnight City Blues",
+    artist: "Spaghetti Blue Blues",
+    coverUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop",
+    tracks: [
+      { title: "Neon Lights", duration: "3:45" },
+      { title: "Desert Wind", duration: "4:20" },
+      { title: "Night Rider", duration: "3:10" }
+    ]
+  },
+  {
+    id: 2,
+    title: "Acoustic Sessions",
+    artist: "The Velvet Chords",
+    coverUrl: "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?q=80&w=600&auto=format&fit=crop",
+    tracks: [
+      { title: "Unplugged Intro", duration: "2:15" },
+      { title: "Raw Emotions", duration: "4:05" },
+      { title: "Strings & Wood", duration: "3:50" }
+    ]
+  },
+  {
+    id: 3,
+    title: "Electronic Dreams",
+    artist: "Synthwave Cult",
+    coverUrl: "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=600&auto=format&fit=crop",
+    tracks: [
+      { title: "Digital Sunrise", duration: "5:00" },
+      { title: "Cyber Pulse", duration: "4:30" },
+      { title: "Virtual Reality", duration: "6:15" }
+    ]
+  }
+];
+
 // Secure Player Component
-const SecurePlayer = () => {
+const SecurePlayer = ({ album }: { album: any }) => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
-  
-  // Fake playlist for demo
-  const playlist = [
-    { title: "Midnight City Blues", artist: "Spaghetti Blue Blues", duration: "3:45" },
-    { title: "Desert Wind", artist: "Spaghetti Blue Blues", duration: "4:20" },
-    { title: "Neon Lights", artist: "Spaghetti Blue Blues", duration: "3:10" }
-  ];
-  const [currentTrack] = useState(0);
+  const [currentTrack, setCurrentTrack] = useState(0);
 
   // Security: Prevent context menu (right click) on the player area
   const preventContextMenu = (e: React.MouseEvent) => e.preventDefault();
+
+  useEffect(() => {
+    // Reset track when album changes
+    setCurrentTrack(0);
+    setIsPlaying(false);
+    setProgress(0);
+  }, [album]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -41,32 +78,40 @@ const SecurePlayer = () => {
       setIsPlaying(!isPlaying);
     }
   };
+  
+  if (!album) return null;
 
   return (
     <div 
-      className="bg-[#121214] border border-[#b08b4a]/20 p-6 rounded-xl shadow-2xl relative overflow-hidden group select-none"
+      className="bg-[#121214] border border-[#b08b4a]/20 p-6 rounded-xl shadow-2xl relative overflow-hidden group select-none transition-all duration-700"
       onContextMenu={preventContextMenu}
     >
       {/* Decorative gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-[#b08b4a]/10 to-transparent opacity-50 pointer-events-none"></div>
       
       <div className="relative z-10 flex flex-col md:flex-row items-center gap-8">
-        {/* Album Art / Visualizer Placeholder */}
-        <div className="w-48 h-48 bg-[#0a0a0c] rounded-lg border border-zinc-800 flex items-center justify-center relative overflow-hidden shrink-0">
-           <Music size={48} className="text-[#b08b4a]/40" />
+        {/* Album Art / Visualizer */}
+        <div className="w-48 h-48 rounded-lg border border-zinc-800 flex items-center justify-center relative overflow-hidden shrink-0 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
+           <div 
+             className={`absolute inset-0 bg-cover bg-center transition-transform duration-[10s] ease-linear ${isPlaying ? 'scale-125' : 'scale-100'}`} 
+             style={{ backgroundImage: `url(${album.coverUrl})` }}
+           ></div>
            {isPlaying && (
-             <div className="absolute inset-0 bg-[url('https://res2.weblium.site/res/5cb874d98daa1d0023d47da3/5cff90a75da05700239abe86_optimized')] bg-cover bg-center opacity-30 mix-blend-overlay animate-pulse"></div>
+             <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px] flex items-center justify-center animate-pulse">
+                <div className="w-16 h-16 rounded-full border-4 border-[#b08b4a]/50 flex items-center justify-center animate-spin" style={{ animationDuration: '4s' }}>
+                  <div className="w-4 h-4 bg-[#181716] rounded-full"></div>
+                </div>
+             </div>
            )}
         </div>
 
         {/* Player Controls & Info */}
         <div className="flex-1 w-full">
           <h3 className="font-oswald text-[#b08b4a] text-xs tracking-[0.2em] uppercase mb-2">Now Playing</h3>
-          <h2 className="font-raleway text-3xl font-bold text-white mb-1">{playlist[currentTrack].title}</h2>
-          <p className="font-lato text-zinc-400 mb-6">{playlist[currentTrack].artist}</p>
+          <h2 className="font-raleway text-3xl font-bold text-white mb-1">{album.tracks[currentTrack].title}</h2>
+          <p className="font-lato text-zinc-400 mb-6">{album.artist}</p>
 
-          {/* Secure Audio Element (No controls attribute) */}
-          {/* src is empty for demo, but normally would point to a signed, expiring URL */}
+          {/* Secure Audio Element */}
           <audio ref={audioRef} src="" preload="none" onEnded={() => setIsPlaying(false)} />
 
           {/* Progress Bar */}
@@ -77,7 +122,10 @@ const SecurePlayer = () => {
           {/* Controls */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <button className="text-zinc-500 hover:text-white transition-colors">
+              <button 
+                className="text-zinc-500 hover:text-white transition-colors"
+                onClick={() => setCurrentTrack(Math.max(0, currentTrack - 1))}
+              >
                 <SkipBack size={24} />
               </button>
               <button 
@@ -86,18 +134,44 @@ const SecurePlayer = () => {
               >
                 {isPlaying ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" className="ml-1" />}
               </button>
-              <button className="text-zinc-500 hover:text-white transition-colors">
+              <button 
+                className="text-zinc-500 hover:text-white transition-colors"
+                onClick={() => setCurrentTrack(Math.min(album.tracks.length - 1, currentTrack + 1))}
+              >
                 <SkipForward size={24} />
               </button>
             </div>
             
-            <div className="flex items-center gap-2 text-zinc-500 hidden md:flex">
-               <Volume2 size={16} />
-               <div className="w-20 h-1 bg-zinc-800 rounded-full">
-                 <div className="w-2/3 h-full bg-zinc-500 rounded-full"></div>
-               </div>
+            <div className="flex flex-col items-end gap-1">
+              <span className="font-lato text-xs text-zinc-500">Track {currentTrack + 1} of {album.tracks.length}</span>
+              <div className="flex items-center gap-2 text-zinc-500 hidden md:flex">
+                 <Volume2 size={16} />
+                 <div className="w-20 h-1 bg-zinc-800 rounded-full">
+                   <div className="w-2/3 h-full bg-zinc-500 rounded-full"></div>
+                 </div>
+              </div>
             </div>
           </div>
+        </div>
+      </div>
+      
+      {/* Tracklist Preview */}
+      <div className="mt-8 pt-6 border-t border-zinc-800/50">
+        <h4 className="font-oswald text-zinc-400 text-xs tracking-widest uppercase mb-4">Tracklist</h4>
+        <div className="space-y-2">
+          {album.tracks.map((track: any, idx: number) => (
+            <div 
+              key={idx} 
+              onClick={() => { setCurrentTrack(idx); setIsPlaying(true); }}
+              className={`flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors ${idx === currentTrack ? 'bg-zinc-800/50 text-[#b08b4a]' : 'hover:bg-zinc-900/50 text-zinc-400 hover:text-white'}`}
+            >
+              <div className="flex items-center gap-3">
+                <span className="font-oswald w-4 text-xs opacity-50">{idx + 1}</span>
+                <span className="font-lato text-sm">{track.title}</span>
+              </div>
+              <span className="font-lato text-xs opacity-50">{track.duration}</span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -107,6 +181,16 @@ const SecurePlayer = () => {
 
 // Main Landing Page Component
 export default function MusicHub() {
+  const [activeAlbum, setActiveAlbum] = useState(ALBUMS[0]);
+
+  const handleAlbumSelect = (album: any) => {
+    setActiveAlbum(album);
+    const playlistSection = document.getElementById('playlist');
+    if (playlistSection) {
+      playlistSection.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#181716] text-white selection:bg-[#b08b4a] selection:text-[#181716]">
       
@@ -124,12 +208,14 @@ export default function MusicHub() {
             <a href="#about" className="hover:text-white transition-colors duration-300">ABOUT</a>
           </nav>
 
-          <Link 
-            to="/login" 
-            className="font-oswald border border-[#b08b4a] text-[#b08b4a] hover:bg-[#b08b4a] hover:text-[#181716] px-6 py-2 tracking-[0.1em] uppercase text-sm transition-all duration-300"
-          >
-            Artist Login
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link 
+              to="/login" 
+              className="font-oswald border border-[#b08b4a] text-[#b08b4a] hover:bg-[#b08b4a] hover:text-[#181716] px-6 py-2 tracking-[0.1em] uppercase text-sm transition-all duration-300"
+            >
+              Artist Login
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -169,7 +255,7 @@ export default function MusicHub() {
                  <div className="w-2.5 h-2.5 rounded-full bg-amber-500/50"></div>
                  <div className="w-2.5 h-2.5 rounded-full bg-green-500/50"></div>
                </div>
-               <div className="flex-1 bg-[#0a0a0c] bg-[url('https://res2.weblium.site/res/5cb874d98daa1d0023d47da3/5cff90a75da05700239abe86_optimized')] bg-cover bg-center opacity-60"></div>
+               <div className="flex-1 bg-[#0a0a0c] bg-cover bg-center opacity-60" style={{ backgroundImage: `url(${activeAlbum.coverUrl})` }}></div>
             </div>
           </div>
         </div>
@@ -189,17 +275,23 @@ export default function MusicHub() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[1, 2, 3].map((item) => (
-              <div key={item} className="group cursor-pointer">
-                <div className="relative aspect-[4/5] bg-zinc-900 overflow-hidden mb-6">
-                  {/* Placeholder for project image */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#181716] via-transparent to-transparent opacity-80 z-10"></div>
-                  <div className="w-full h-full bg-zinc-800 group-hover:scale-105 transition-transform duration-700"></div>
+            {ALBUMS.map((album) => (
+              <div key={album.id} className="group cursor-pointer" onClick={() => handleAlbumSelect(album)}>
+                <div className={`relative aspect-[4/5] bg-zinc-900 overflow-hidden mb-6 rounded-lg transition-all duration-500 ${activeAlbum.id === album.id ? 'ring-2 ring-[#b08b4a] ring-offset-4 ring-offset-[#121214] scale-[1.02]' : ''}`}>
+                  {/* Project image */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#181716] via-[#181716]/40 to-transparent opacity-90 z-10"></div>
+                  <div 
+                    className="w-full h-full bg-cover bg-center group-hover:scale-110 transition-transform duration-700"
+                    style={{ backgroundImage: `url(${album.coverUrl})` }}
+                  ></div>
                   
-                  <div className="absolute bottom-6 left-6 z-20">
-                    <span className="font-oswald bg-[#b08b4a] text-[#181716] text-[10px] px-2 py-1 tracking-[0.2em] uppercase font-bold mb-3 inline-block">New Release</span>
-                    <h4 className="font-raleway text-2xl font-bold text-white mb-1 group-hover:text-[#b08b4a] transition-colors">Project Name {item}</h4>
-                    <p className="font-lato text-zinc-400 text-sm">Artist / Band</p>
+                  <div className="absolute bottom-6 left-6 right-6 z-20">
+                    <span className="font-oswald bg-[#b08b4a] text-[#181716] text-[10px] px-2 py-1 tracking-[0.2em] uppercase font-bold mb-3 inline-block shadow-lg">Album</span>
+                    <h4 className="font-raleway text-2xl font-bold text-white mb-1 group-hover:text-[#b08b4a] transition-colors line-clamp-1">{album.title}</h4>
+                    <p className="font-lato text-zinc-400 text-sm flex items-center justify-between">
+                      {album.artist}
+                      <span className="opacity-0 group-hover:opacity-100 transition-opacity"><Play size={16} fill="currentColor" className="text-[#b08b4a]" /></span>
+                    </p>
                   </div>
                 </div>
               </div>
@@ -219,7 +311,7 @@ export default function MusicHub() {
             </p>
           </div>
           
-          <SecurePlayer />
+          <SecurePlayer album={activeAlbum} />
         </div>
       </section>
 
@@ -239,9 +331,9 @@ export default function MusicHub() {
             <div>
               <h4 className="font-oswald text-white tracking-[0.1em] mb-6">PLATFORM</h4>
               <ul className="space-y-4 font-lato text-zinc-500">
-                <li><a href="#" className="hover:text-[#b08b4a] transition-colors">Projects</a></li>
-                <li><a href="#" className="hover:text-[#b08b4a] transition-colors">Playlists</a></li>
-                <li><a href="#" className="hover:text-[#b08b4a] transition-colors">Live Studio</a></li>
+                <li><a href="#projects" className="hover:text-[#b08b4a] transition-colors">Projects</a></li>
+                <li><a href="#playlist" className="hover:text-[#b08b4a] transition-colors">Playlists</a></li>
+                <li><a href="#" className="hover:text-[#b08b4a] transition-colors">CMS Admin</a></li>
               </ul>
             </div>
             
