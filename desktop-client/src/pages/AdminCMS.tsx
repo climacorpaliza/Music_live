@@ -6,9 +6,14 @@ export default function AdminCMS() {
   const [albums, setAlbums] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
+  // New Album State (Extended)
   const [newAlbumTitle, setNewAlbumTitle] = useState('');
   const [newAlbumArtist, setNewAlbumArtist] = useState('');
   const [newAlbumCover, setNewAlbumCover] = useState('');
+  const [newAlbumDescription, setNewAlbumDescription] = useState('');
+  const [newAlbumCredits, setNewAlbumCredits] = useState('');
+  const [newAlbumReleaseDate, setNewAlbumReleaseDate] = useState('');
+  const [newAlbumBuyLink, setNewAlbumBuyLink] = useState('');
 
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [tracks, setTracks] = useState<any[]>([]);
@@ -49,7 +54,15 @@ export default function AdminCMS() {
   const handleCreateAlbum = async (e: React.FormEvent) => {
     e.preventDefault();
     const { data } = await supabase.from('albums').insert([
-      { title: newAlbumTitle, artist: newAlbumArtist, cover_url: newAlbumCover }
+      { 
+        title: newAlbumTitle, 
+        artist: newAlbumArtist, 
+        cover_url: newAlbumCover,
+        description: newAlbumDescription,
+        credits: newAlbumCredits,
+        release_date: newAlbumReleaseDate,
+        buy_link: newAlbumBuyLink
+      }
     ]).select();
     
     if (data) {
@@ -57,6 +70,10 @@ export default function AdminCMS() {
       setNewAlbumTitle('');
       setNewAlbumArtist('');
       setNewAlbumCover('');
+      setNewAlbumDescription('');
+      setNewAlbumCredits('');
+      setNewAlbumReleaseDate('');
+      setNewAlbumBuyLink('');
     }
   };
 
@@ -112,7 +129,7 @@ export default function AdminCMS() {
     <div className="p-8 pb-32 max-w-7xl mx-auto space-y-12 animate-fade-in bg-[#0a0a0c] min-h-screen text-white">
       <header className="mb-12">
         <h1 className="text-3xl font-bold font-oswald tracking-widest text-[#b08b4a] mb-2">CMS ADMIN</h1>
-        <p className="text-zinc-400 font-lato">Manage albums, tracks, and public site configuration.</p>
+        <p className="text-zinc-400 font-lato">Manage albums, metadata, tracks, and public site configuration.</p>
       </header>
 
       <section className="bg-[#181716] border border-zinc-800 rounded-xl p-6">
@@ -158,14 +175,28 @@ export default function AdminCMS() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <section className="bg-[#181716] border border-zinc-800 rounded-xl p-6">
           <h2 className="text-xl font-bold font-raleway mb-6 flex items-center gap-2"><ImageIcon size={20} className="text-[#b08b4a]"/> Albums</h2>
-          <form onSubmit={handleCreateAlbum} className="mb-8 grid grid-cols-2 gap-4 bg-[#121214] p-4 rounded-lg border border-zinc-800/50">
-            <input required type="text" placeholder="Album Title" value={newAlbumTitle} onChange={e => setNewAlbumTitle(e.target.value)} className="bg-[#0a0a0c] border border-zinc-800 rounded px-3 py-2 text-sm focus:border-[#b08b4a] outline-none font-lato"/>
-            <input required type="text" placeholder="Artist" value={newAlbumArtist} onChange={e => setNewAlbumArtist(e.target.value)} className="bg-[#0a0a0c] border border-zinc-800 rounded px-3 py-2 text-sm focus:border-[#b08b4a] outline-none font-lato"/>
-            <input required type="url" placeholder="Cover URL" value={newAlbumCover} onChange={e => setNewAlbumCover(e.target.value)} className="col-span-2 bg-[#0a0a0c] border border-zinc-800 rounded px-3 py-2 text-sm focus:border-[#b08b4a] outline-none font-lato"/>
-            <button type="submit" className="col-span-2 bg-[#b08b4a] text-[#181716] font-bold py-2 rounded flex items-center justify-center gap-2 font-oswald">
+          
+          <form onSubmit={handleCreateAlbum} className="mb-8 flex flex-col gap-4 bg-[#121214] p-4 rounded-lg border border-zinc-800/50">
+            <div className="grid grid-cols-2 gap-4">
+              <input required type="text" placeholder="Album Title" value={newAlbumTitle} onChange={e => setNewAlbumTitle(e.target.value)} className="bg-[#0a0a0c] border border-zinc-800 rounded px-3 py-2 text-sm focus:border-[#b08b4a] outline-none font-lato"/>
+              <input required type="text" placeholder="Artist" value={newAlbumArtist} onChange={e => setNewAlbumArtist(e.target.value)} className="bg-[#0a0a0c] border border-zinc-800 rounded px-3 py-2 text-sm focus:border-[#b08b4a] outline-none font-lato"/>
+            </div>
+            <input required type="url" placeholder="Cover Image URL" value={newAlbumCover} onChange={e => setNewAlbumCover(e.target.value)} className="bg-[#0a0a0c] border border-zinc-800 rounded px-3 py-2 text-sm focus:border-[#b08b4a] outline-none font-lato"/>
+            
+            <textarea placeholder="Album Description (Story / Intro)" value={newAlbumDescription} onChange={e => setNewAlbumDescription(e.target.value)} rows={2} className="bg-[#0a0a0c] border border-zinc-800 rounded px-3 py-2 text-sm focus:border-[#b08b4a] outline-none font-lato resize-none"></textarea>
+            
+            <input type="text" placeholder="Credits (e.g. Mixed by...)" value={newAlbumCredits} onChange={e => setNewAlbumCredits(e.target.value)} className="bg-[#0a0a0c] border border-zinc-800 rounded px-3 py-2 text-sm focus:border-[#b08b4a] outline-none font-lato"/>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <input type="text" placeholder="Release Date / Year" value={newAlbumReleaseDate} onChange={e => setNewAlbumReleaseDate(e.target.value)} className="bg-[#0a0a0c] border border-zinc-800 rounded px-3 py-2 text-sm focus:border-[#b08b4a] outline-none font-lato"/>
+              <input type="url" placeholder="Spotify/Buy URL (Optional)" value={newAlbumBuyLink} onChange={e => setNewAlbumBuyLink(e.target.value)} className="bg-[#0a0a0c] border border-zinc-800 rounded px-3 py-2 text-sm focus:border-[#b08b4a] outline-none font-lato"/>
+            </div>
+
+            <button type="submit" className="bg-[#b08b4a] text-[#181716] font-bold py-2 rounded flex items-center justify-center gap-2 font-oswald mt-2">
               <Plus size={16} /> Create Album
             </button>
           </form>
+
           <div className="space-y-3 h-[400px] overflow-y-auto pr-2 custom-scrollbar">
             {loading ? <p className="text-zinc-500">Loading...</p> : albums.map(album => (
               <div key={album.id} onClick={() => setSelectedAlbumId(album.id)} className={`flex items-center gap-4 p-3 rounded-lg border cursor-pointer transition-colors ${selectedAlbumId === album.id ? 'bg-[#b08b4a]/10 border-[#b08b4a]' : 'bg-[#121214] border-zinc-800 hover:border-zinc-700'}`}>
@@ -185,7 +216,7 @@ export default function AdminCMS() {
         <section className="bg-[#181716] border border-zinc-800 rounded-xl p-6">
           <h2 className="text-xl font-bold font-raleway mb-6 flex items-center gap-2"><Music size={20} className="text-[#b08b4a]"/> Tracks</h2>
           {!selectedAlbumId ? (
-            <div className="flex flex-col items-center justify-center h-[300px] text-zinc-500">
+            <div className="flex flex-col items-center justify-center h-[500px] text-zinc-500">
               <CheckCircle size={48} className="mb-4 opacity-20" />
               <p className="font-lato">Select an album to manage tracks.</p>
             </div>
@@ -194,12 +225,12 @@ export default function AdminCMS() {
               <form onSubmit={handleCreateTrack} className="mb-8 grid grid-cols-3 gap-4 bg-[#121214] p-4 rounded-lg border border-zinc-800/50">
                 <input required type="text" placeholder="Track Title" value={newTrackTitle} onChange={e => setNewTrackTitle(e.target.value)} className="col-span-2 bg-[#0a0a0c] border border-zinc-800 rounded px-3 py-2 text-sm focus:border-[#b08b4a] outline-none"/>
                 <input required type="text" placeholder="Duration (e.g. 3:45)" value={newTrackDuration} onChange={e => setNewTrackDuration(e.target.value)} className="bg-[#0a0a0c] border border-zinc-800 rounded px-3 py-2 text-sm focus:border-[#b08b4a] outline-none"/>
-                <input type="url" placeholder="MP3 URL (Optional for now)" value={newTrackUrl} onChange={e => setNewTrackUrl(e.target.value)} className="col-span-3 bg-[#0a0a0c] border border-zinc-800 rounded px-3 py-2 text-sm focus:border-[#b08b4a] outline-none"/>
+                <input type="url" placeholder="MP3 URL (Optional)" value={newTrackUrl} onChange={e => setNewTrackUrl(e.target.value)} className="col-span-3 bg-[#0a0a0c] border border-zinc-800 rounded px-3 py-2 text-sm focus:border-[#b08b4a] outline-none"/>
                 <button type="submit" className="col-span-3 bg-[#b08b4a] text-[#181716] font-bold py-2 rounded flex items-center justify-center font-oswald">
                   <Plus size={16} /> Add Track
                 </button>
               </form>
-              <div className="space-y-2 h-[350px] overflow-y-auto pr-2 custom-scrollbar">
+              <div className="space-y-2 h-[450px] overflow-y-auto pr-2 custom-scrollbar">
                 {tracks.map((track, idx) => (
                   <div key={track.id} className="flex items-center gap-4 p-3 bg-[#121214] border border-zinc-800 rounded-lg group hover:border-[#b08b4a]/50">
                     <span className="text-xs font-oswald text-zinc-500 w-4">{idx + 1}</span>
