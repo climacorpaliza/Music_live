@@ -126,8 +126,9 @@ export default function AdminCMS() {
   };
 
   return (
-    <div className="p-8 pb-32 max-w-7xl mx-auto space-y-12 animate-fade-in bg-[#0a0a0c] min-h-screen text-white">
-      <header className="mb-12">
+    <div className="h-full overflow-y-auto bg-[#0a0a0c] custom-scrollbar">
+      <div className="p-8 pb-32 max-w-7xl mx-auto space-y-12 animate-fade-in text-white">
+        <header className="mb-12">
         <h1 className="text-3xl font-bold font-oswald tracking-widest text-[#b08b4a] mb-2">CMS ADMIN</h1>
         <p className="text-zinc-400 font-lato">Manage albums, metadata, tracks, and public site configuration.</p>
       </header>
@@ -247,6 +248,7 @@ export default function AdminCMS() {
             </>
           )}
         </section>
+      </div>
       </div>
     </div>
   );
