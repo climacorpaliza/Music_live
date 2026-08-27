@@ -26,6 +26,7 @@ export default function StemStudio() {
   // AI Splitter State
   const [isSplitting, setIsSplitting] = useState(false);
   const [splitMessage, setSplitMessage] = useState<string | null>(null);
+  const [splitFormat, setSplitFormat] = useState<'mp3' | 'wav'>('mp3');
   
   // Audio Playback State
   const [playingStemId, setPlayingStemId] = useState<string | null>(null);
