@@ -546,7 +546,20 @@ export default function StemStudio() {
                         />
                     </div>
                     
-                    <div className="relative h-[40px] group bg-red-950/20 border border-red-500/30 hover:border-red-500/60 rounded flex items-center justify-between px-3 cursor-pointer transition-colors overflow-hidden">
+                    <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between px-1">
+                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Formato Salida:</span>
+                          <select 
+                            value={splitFormat} 
+                            onChange={(e) => setSplitFormat(e.target.value as 'mp3' | 'wav')}
+                            disabled={isSplitting}
+                            className="bg-[#09090b] text-xs text-zinc-300 border border-zinc-800 rounded px-2 py-1 outline-none cursor-pointer"
+                          >
+                            <option value="mp3">MP3 320k (Ahorra espacio)</option>
+                            <option value="wav">WAV (Máxima calidad)</option>
+                          </select>
+                        </div>
+                        <div className="relative h-[40px] group bg-red-950/20 border border-red-500/30 hover:border-red-500/60 rounded flex items-center justify-between px-3 cursor-pointer transition-colors overflow-hidden">
                       <input type="file" accept="audio/mpeg, audio/wav, audio/mp3" onChange={handleSplitMP3} disabled={isSplitting} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10" />
                       <div className="flex items-center gap-2 pointer-events-none z-0">
                         {isSplitting ? <RefreshCw size={14} className="animate-spin text-red-400" /> : <Sparkles size={14} className="text-red-400" />}
@@ -555,6 +568,7 @@ export default function StemStudio() {
                         </span>
                       </div>
                     </div>
+                      </div>
                   </div>
                 </div>
 
