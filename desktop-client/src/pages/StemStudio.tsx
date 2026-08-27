@@ -244,7 +244,59 @@ export default function StemStudio() {
     }
   };
 
-    const handleSplitMP3 = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const convertToMp3 = async (blob: Blob, onProgress: (msg: string) => void): Promise<Blob> => {
+    onProgress('Preparando conversor MP3...');
+    if (!(window as any).lamejs) {
+        const lamejsSrc = await import('lamejs/lame.all.js?raw');
+        const script = document.createElement('script');
+        script.innerHTML = lamejsSrc.default + '\nwindow.lamejs = lamejs;';
+        document.head.appendChild(script);
+    }
+    const lamejs = (window as any).lamejs;
+
+    onProgress('Decodificando WAV...');
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const arrayBuffer = await blob.arrayBuffer();
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+    onProgress('Codificando a MP3 Alta Calidad...');
+    const channels = audioBuffer.numberOfChannels;
+    const sampleRateMp3 = audioBuffer.sampleRate;
+    const encoder = new lamejs.Mp3Encoder(channels, sampleRateMp3, 320);
+    
+    const left = audioBuffer.getChannelData(0);
+    const right = channels > 1 ? audioBuffer.getChannelData(1) : left;
+
+    const sampleBlockSize = 1152;
+    const mp3Data = [];
+
+    const floatTo16BitPCM = (input: Float32Array, output: Int16Array, offset: number, length: number) => {
+        for (let i = 0; i < length; i++) {
+            const s = Math.max(-1, Math.min(1, input[offset + i]));
+            output[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+    };
+
+    let sampleOffset = 0;
+    while (sampleOffset < left.length) {
+        const length = Math.min(sampleBlockSize, left.length - sampleOffset);
+        const leftChunk16 = new Int16Array(length);
+        const rightChunk16 = new Int16Array(length);
+        
+        floatTo16BitPCM(left, leftChunk16, sampleOffset, length);
+        floatTo16BitPCM(right, rightChunk16, sampleOffset, length);
+        
+        const mp3buf = encoder.encodeBuffer(leftChunk16, rightChunk16);
+        if (mp3buf.length > 0) mp3Data.push(new Int8Array(mp3buf));
+        sampleOffset += sampleBlockSize;
+    }
+    const mp3buf = encoder.flush();
+    if (mp3buf.length > 0) mp3Data.push(new Int8Array(mp3buf));
+    
+    return new Blob(mp3Data, { type: 'audio/mpeg' });
+  };
+
+  const handleSplitMP3 = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -325,10 +377,20 @@ export default function StemStudio() {
               // Evitar error de CORS o fallos silenciosos
               const fetchRes = await fetch(url);
               if (!fetchRes.ok) throw new Error(`Replicate devolvió error ${fetchRes.status} para ${stemName}`);
-              const blob = await fetchRes.blob();
+              let blob = await fetchRes.blob();
               
-              const finalPath = `${FAKE_BAND_ID}/${targetSongId}/${Date.now()}_${stemName}.wav`;
-              const { error: stemUploadError } = await supabase.storage.from('audios').upload(finalPath, blob, { contentType: 'audio/wav' });
+              let fileExt = 'wav';
+              let mimeType = 'audio/wav';
+
+              if (splitFormat === 'mp3') {
+                 blob = await convertToMp3(blob, (msg) => setSplitMessage(`[${stemName}] ${msg}`));
+                 fileExt = 'mp3';
+                 mimeType = 'audio/mpeg';
+                 setSplitMessage(`Subiendo ${stemName} (MP3) a la nube...`);
+              }
+              
+              const finalPath = `${FAKE_BAND_ID}/${targetSongId}/${Date.now()}_${stemName}.${fileExt}`;
+              const { error: stemUploadError } = await supabase.storage.from('audios').upload(finalPath, blob, { contentType: mimeType });
               
               // Si el storage falla (ej. límite de 1GB de Supabase), abortamos para no crear stems fantasmas
               if (stemUploadError) throw new Error(`Error guardando ${stemName} en Storage: ` + stemUploadError.message);
@@ -340,7 +402,7 @@ export default function StemStudio() {
                 name: stemName,
                 file_url: finalUrl.publicUrl,
                 type: 'Audio',
-                metadata: { original_name: `${stemName}.wav`, format: 'audio/wav', is_master: isMasterFlag }
+                metadata: { original_name: `${stemName}.${fileExt}`, format: mimeType, is_master: isMasterFlag }
               });
             }
 
