@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import './StemStudio.css';
 import { supabase } from '../lib/supabase';
 import StemUploader from '../components/StemUploader';
-import { Music, FolderPlus, Disc3, FileAudio, Loader2, Trash2, Sparkles, CheckCircle, RefreshCw, Play, Pause } from 'lucide-react';
+import { Music, FolderPlus, Disc3, FileAudio, Loader2, Trash2, Sparkles, CheckCircle, RefreshCw, Play, Pause, Plus } from 'lucide-react';
 
 const FAKE_BAND_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -60,6 +60,26 @@ export default function StemStudio() {
       setStems([]);
     }
   }, [selectedSongId]);
+
+  const handleCreateNewProject = async () => {
+    const projectName = prompt("Nombre del nuevo proyecto:");
+    if (!projectName) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('songs')
+        .insert({ band_id: FAKE_BAND_ID, title: projectName })
+        .select('id')
+        .single();
+        
+      if (error) throw error;
+      
+      await fetchSongs();
+      setSelectedSongId(data.id);
+    } catch (err: any) {
+      alert("Error al crear carpeta: " + err.message);
+    }
+  };
 
   const fetchSongs = async () => {
     setLoadingSongs(true);
