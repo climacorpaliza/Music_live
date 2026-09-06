@@ -23,6 +23,11 @@ export default function StemStudio() {
 
   const [timeSignature, setTimeSignature] = useState<string>('4/4');
 
+  // Watermark DSP state
+  const [watermarkJobStatus, setWatermarkJobStatus] = useState<'idle' | 'pending' | 'processing' | 'completed' | 'failed'>('idle');
+  const [cleanAudioUrl, setCleanAudioUrl] = useState<string | null>(null);
+  const [dspMessage, setDspMessage] = useState<string | null>(null);
+
   // AI Splitter State
   const [isSplitting, setIsSplitting] = useState(false);
   const [splitMessage, setSplitMessage] = useState<string | null>(null);
@@ -57,10 +62,85 @@ export default function StemStudio() {
         audioRef.current.pause();
         setPlayingStemId(null);
       }
+      // Reset DSP state for new song
+      setWatermarkJobStatus('idle');
+      setCleanAudioUrl(null);
+      setDspMessage(null);
     } else {
       setStems([]);
     }
   }, [selectedSongId]);
+
+  // Realtime subscription for Watermark Jobs
+  useEffect(() => {
+    const channel = supabase
+      .channel('watermark-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'watermark_jobs',
+        },
+        async (payload) => {
+          const { status, clean_file_url } = payload.new;
+          setWatermarkJobStatus(status);
+          
+          if (status === 'completed' && clean_file_url) {
+            // Get the signed URL for download
+            const { data } = await supabase.storage.from('clean-audio').createSignedUrl(clean_file_url, 3600);
+            if (data) {
+               setCleanAudioUrl(data.signedUrl);
+               setDspMessage("¡Procesamiento DSP completado con éxito!");
+            }
+          } else if (status === 'failed') {
+            setDspMessage(`Error: ${payload.new.error_message || 'Desconocido'}`);
+          } else if (status === 'processing') {
+            setDspMessage("Decorrelacionando audio y extrayendo stems...");
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const handleProcessWatermark = async () => {
+    // Tomamos el primer stem como el master (o el que sea la Mezcla Master)
+    if (stems.length === 0) return;
+    const masterStem = stems.find(s => s.metadata?.is_master) || stems[0];
+    
+    setWatermarkJobStatus('pending');
+    setDspMessage("Iniciando procesamiento en GPU...");
+    setCleanAudioUrl(null);
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-watermark`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token || ''}`
+          },
+          body: JSON.stringify({ fileUrl: masterStem.file_url })
+        }
+      );
+      
+      if (!res.ok) {
+        throw new Error('Error al iniciar el job en Supabase');
+      }
+      
+    } catch (error: any) {
+      console.error(error);
+      setWatermarkJobStatus('failed');
+      setDspMessage(`Falló el inicio del Job: ${error.message}`);
+    }
+  };
 
   const handleCreateNewProject = async () => {
     const projectName = prompt("Nombre del nuevo proyecto:");
@@ -684,6 +764,52 @@ export default function StemStudio() {
                     ))}
                   </div>
                 )}
+              </div>
+
+              {/* DSP Watermark Module */}
+              <div className="flex-1 bg-[#1a1a1e] border border-zinc-800/80 rounded-lg p-4 flex flex-col gap-4">
+                <div className="flex items-center justify-between pb-2 border-b border-zinc-800/50">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                    <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">DSP Watermark Process</h3>
+                  </div>
+                </div>
+                
+                <div className="flex flex-col gap-3 flex-1 justify-between">
+                  <p className="text-[10px] text-zinc-500 leading-tight">
+                    Decorrelación asíncrona mediante HTDemucs y manipulaciones de Phase Vocoder para proteger el master.
+                  </p>
+                  
+                  <div className="flex flex-col gap-2">
+                    {cleanAudioUrl && (
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Master Limpio:</span>
+                        <audio controls src={cleanAudioUrl} className="w-full h-7 opacity-70 hover:opacity-100 transition invert grayscale">
+                          Tu navegador no soporta audio.
+                        </audio>
+                      </div>
+                    )}
+
+                    <button 
+                      onClick={handleProcessWatermark}
+                      disabled={!selectedSongId || watermarkJobStatus === 'pending' || watermarkJobStatus === 'processing' || stems.length === 0}
+                      className="w-full h-[32px] bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/30 text-blue-400 text-xs font-bold rounded flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
+                    >
+                      {(watermarkJobStatus === 'pending' || watermarkJobStatus === 'processing') ? (
+                        <RefreshCw className="animate-spin" size={14} />
+                      ) : (
+                        <Sparkles size={14} />
+                      )}
+                      {watermarkJobStatus === 'pending' ? "Iniciando Job..." : watermarkJobStatus === 'processing' ? "Procesando en GPU..." : "Decorrelacionar Audio"}
+                    </button>
+                    
+                    {dspMessage && (
+                      <div className={`text-[10px] px-2 py-1.5 rounded border truncate ${watermarkJobStatus === 'failed' ? 'bg-red-900/10 text-red-400 border-red-900/30' : watermarkJobStatus === 'completed' ? 'bg-green-900/10 text-green-400 border-green-900/30' : 'bg-blue-900/10 text-blue-400 border-blue-900/30'}`}>
+                        {dspMessage}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
             </div>
