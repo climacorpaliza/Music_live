@@ -1,0 +1,3 @@
+[submodule "web-portal"]
+	path = web-portal
+	url = https://github.com/climacorpaliza/web-portal.git
