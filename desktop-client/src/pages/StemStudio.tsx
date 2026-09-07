@@ -107,6 +107,60 @@ export default function StemStudio() {
     };
   }, []);
 
+  const [isUploadingWatermark, setIsUploadingWatermark] = useState(false);
+
+  const handleUploadAndProcessWatermark = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setWatermarkJobStatus('pending');
+    setIsUploadingWatermark(true);
+    setDspMessage("Subiendo archivo original...");
+    setCleanAudioUrl(null);
+
+    try {
+      // 1. Upload to Supabase Storage (raw-audio bucket)
+      const fileName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+      const { error: uploadError } = await supabase.storage.from('raw-audio').upload(fileName, file);
+      
+      if (uploadError) {
+        throw new Error(`Error subiendo audio: ${uploadError.message}`);
+      }
+
+      // 2. Get Public URL
+      const { data: publicUrlData } = supabase.storage.from('raw-audio').getPublicUrl(fileName);
+      const fileUrl = publicUrlData.publicUrl;
+
+      setDspMessage("Iniciando procesamiento en GPU...");
+
+      // 3. Trigger Edge Function
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-watermark`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token || ''}`
+          },
+          body: JSON.stringify({ fileUrl })
+        }
+      );
+      
+      if (!res.ok) {
+        throw new Error('Error al iniciar el job en Supabase');
+      }
+      
+    } catch (error: any) {
+      console.error(error);
+      setWatermarkJobStatus('failed');
+      setDspMessage(`Falló el proceso: ${error.message}`);
+    } finally {
+      setIsUploadingWatermark(false);
+      if (e.target) e.target.value = ''; // Reset input
+    }
+  };
+
   const handleProcessWatermark = async () => {
     // Tomamos el primer stem como el master (o el que sea la Mezcla Master)
     if (stems.length === 0) return;
@@ -790,18 +844,23 @@ export default function StemStudio() {
                       </div>
                     )}
 
-                    <button 
-                      onClick={handleProcessWatermark}
-                      disabled={!selectedSongId || watermarkJobStatus === 'pending' || watermarkJobStatus === 'processing' || stems.length === 0}
-                      className="w-full h-[32px] bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/30 text-blue-400 text-xs font-bold rounded flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
-                    >
-                      {(watermarkJobStatus === 'pending' || watermarkJobStatus === 'processing') ? (
-                        <RefreshCw className="animate-spin" size={14} />
-                      ) : (
-                        <Sparkles size={14} />
-                      )}
-                      {watermarkJobStatus === 'pending' ? "Iniciando Job..." : watermarkJobStatus === 'processing' ? "Procesando en GPU..." : "Decorrelacionar Audio"}
-                    </button>
+                    <div className="relative w-full h-[32px] group bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/30 text-blue-400 rounded flex items-center justify-center transition-colors overflow-hidden">
+                      <input 
+                        type="file" 
+                        accept="audio/mpeg, audio/wav, audio/mp3" 
+                        onChange={handleUploadAndProcessWatermark} 
+                        disabled={watermarkJobStatus === 'pending' || watermarkJobStatus === 'processing' || isUploadingWatermark} 
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10" 
+                      />
+                      <div className="flex items-center gap-2 pointer-events-none z-0 text-xs font-bold">
+                        {(watermarkJobStatus === 'pending' || watermarkJobStatus === 'processing' || isUploadingWatermark) ? (
+                          <RefreshCw className="animate-spin" size={14} />
+                        ) : (
+                          <Sparkles size={14} />
+                        )}
+                        {isUploadingWatermark ? "Subiendo..." : watermarkJobStatus === 'pending' ? "Iniciando Job..." : watermarkJobStatus === 'processing' ? "Procesando en GPU..." : "Subir y Decorrelacionar Audio"}
+                      </div>
+                    </div>
                     
                     {dspMessage && (
                       <div className={`text-[10px] px-2 py-1.5 rounded border truncate ${watermarkJobStatus === 'failed' ? 'bg-red-900/10 text-red-400 border-red-900/30' : watermarkJobStatus === 'completed' ? 'bg-green-900/10 text-green-400 border-green-900/30' : 'bg-blue-900/10 text-blue-400 border-blue-900/30'}`}>
