@@ -161,41 +161,6 @@ export default function StemStudio() {
     }
   };
 
-  const handleProcessWatermark = async () => {
-    // Tomamos el primer stem como el master (o el que sea la Mezcla Master)
-    if (stems.length === 0) return;
-    const masterStem = stems.find(s => s.metadata?.is_master) || stems[0];
-    
-    setWatermarkJobStatus('pending');
-    setDspMessage("Iniciando procesamiento en GPU...");
-    setCleanAudioUrl(null);
-    
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-watermark`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token || ''}`
-          },
-          body: JSON.stringify({ fileUrl: masterStem.file_url })
-        }
-      );
-      
-      if (!res.ok) {
-        throw new Error('Error al iniciar el job en Supabase');
-      }
-      
-    } catch (error: any) {
-      console.error(error);
-      setWatermarkJobStatus('failed');
-      setDspMessage(`Falló el inicio del Job: ${error.message}`);
-    }
-  };
-
   const handleCreateNewProject = async () => {
     const projectName = prompt("Nombre del nuevo proyecto:");
     if (!projectName) return;
